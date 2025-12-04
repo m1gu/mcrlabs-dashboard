@@ -1,0 +1,876 @@
+Downloader QBench Data API — Catálogo de Endpoints
+==================================================
+
+Base general:
+- Base URL por defecto: `http://localhost:8000`
+- Prefijo de versión: `/api/v1`
+- Todas las fechas y horas se envían/reciben en formato ISO 8601 (`YYYY-MM-DDTHH:MM:SSZ`).
+- Los parámetros numéricos aceptan el punto (`.`) como separador decimal.
+- Salvo indicación distinta, todos los parámetros query son opcionales y pueden combinarse.
+
+----------------------------------------------------------------------
+## 1. GET /api/health
+- **Objetivo:** confirmar que la aplicación FastAPI y las dependencias principales están en línea.
+- **Explicación:** endpoint sin autenticación que devuelve un payload mínimo para verificaciones de uptime y monitoreo.
+- **Parámetros:** no aplica.
+- **Ejemplo de respuesta:**
+```json
+{
+  "status": "ok"
+}
+```
+- **Preguntas que responde:**
+  - ¿La API está viva y aceptando conexiones?
+  - ¿Puedo integrar este servicio en un monitor de salud?
+
+----------------------------------------------------------------------
+## 2. GET /api/v1/metrics/summary
+- **Objetivo:** obtener KPIs globales de muestras, pruebas, clientes, reportes y TAT promedio.
+- **Explicación:** agrega los principales indicadores del rango filtrado y expone la última fecha de sincronización disponible.
+- **Parámetros:**
+  - `date_from` (query, datetime ISO 8601): inicio del rango de creación.
+  - `date_to` (query, datetime ISO 8601): fin del rango.
+  - `customer_id` (query, entero): limita a un cliente.
+  - `order_id` (query, entero): limita a una orden.
+  - `state` (query, texto): filtra por estado de prueba.
+  - `sla_hours` (query, float ≥ 0, default 48.0): umbral SLA para el promedio.
+- **Ejemplo de respuesta:**
+```json
+{
+  "kpis": {
+    "total_samples": 214,
+    "total_tests": 640,
+    "total_customers": 18,
+    "total_reports": 201,
+    "average_tat_hours": 42.7
+  },
+  "last_updated_at": "2025-11-05T15:30:12Z",
+  "range_start": "2025-10-29T00:00:00Z",
+  "range_end": "2025-11-05T23:59:59Z"
+}
+```
+- **Preguntas que responde:**
+  - ¿Cuántos clientes y reportes atendimos esta semana?
+  - ¿El TAT promedio se mantiene dentro del SLA configurado?
+
+----------------------------------------------------------------------
+## 3. GET /api/v1/metrics/activity/daily
+- **Objetivo:** analizar la actividad diaria de muestras y pruebas, con opción de comparar contra el periodo anterior.
+- **Explicación:** devuelve series para muestras/pruebas creadas y pruebas reportadas agrupadas por día calendario.
+- **Parámetros:**
+  - `date_from` (query, datetime): inicio del rango actual.
+  - `date_to` (query, datetime): fin del rango actual.
+  - `customer_id` (query, entero): filtro por cliente.
+  - `order_id` (query, entero): filtro por orden.
+  - `compare_previous` (query, boolean, default false): incluye el periodo espejo anterior.
+- **Ejemplo de respuesta:**
+```json
+{
+  "current": [
+    {
+      "date": "2025-11-04",
+      "samples": 28,
+      "tests": 75,
+      "tests_reported": 41
+    },
+    {
+      "date": "2025-11-05",
+      "samples": 32,
+      "tests": 82,
+      "tests_reported": 55
+    }
+  ],
+  "previous": [
+    {
+      "date": "2025-10-28",
+      "samples": 20,
+      "tests": 58,
+      "tests_reported": 34
+    }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Estamos procesando más pruebas por día que la semana pasada?
+  - ¿Qué día mostró la mayor cantidad de pruebas reportadas?
+
+----------------------------------------------------------------------
+## 4. GET /api/v1/metrics/customers/new
+- **Objetivo:** listar los clientes creados en el rango indicado.
+- **Explicación:** útil para monitorear adopción o altas recientes y nutrir dashboards de negocio.
+- **Parámetros:**
+  - `date_from` (query, datetime): fecha mínima de creación.
+  - `date_to` (query, datetime): fecha máxima.
+  - `limit` (query, entero ≥ 1, default 10): máximo de filas.
+- **Ejemplo de respuesta:**
+```json
+{
+  "customers": [
+    {
+      "id": 7021,
+      "name": "Green Labs",
+      "created_at": "2025-11-04T14:15:00Z"
+    },
+    {
+      "id": 7025,
+      "name": "Clinica Horizon",
+      "created_at": "2025-11-03T09:05:00Z"
+    }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué clientes se incorporaron esta semana?
+  - ¿Cuándo se registró el último cliente nuevo?
+
+----------------------------------------------------------------------
+## 5. GET /api/v1/metrics/customers/top-tests
+- **Objetivo:** identificar los clientes con mayor volumen de pruebas dentro del rango.
+- **Explicación:** devuelve rankings con total de pruebas ejecutadas y reportadas para priorizar cuentas clave.
+- **Parámetros:**
+  - `date_from` (query, datetime)
+  - `date_to` (query, datetime)
+  - `limit` (query, entero ≥ 1, default 10)
+- **Ejemplo de respuesta:**
+```json
+{
+  "customers": [
+    {
+      "id": 88,
+      "name": "Prime Bio",
+      "tests": 410,
+      "tests_reported": 398
+    },
+    {
+      "id": 41,
+      "name": "Eco Labs",
+      "tests": 255,
+      "tests_reported": 240
+    }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué clientes generan la mayor carga de pruebas?
+  - ¿Cuál es el gap entre pruebas ejecutadas y reportadas por cliente?
+
+----------------------------------------------------------------------
+## 6. GET /api/v1/metrics/reports/overview
+- **Objetivo:** medir el desempeño de reportes entregados versus SLA.
+- **Explicación:** agrega totales de reportes generados y los clasifica por cumplimiento/violación del SLA configurado.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime): rango de referencia.
+  - `customer_id`, `order_id` (query, entero): filtros adicionales.
+  - `state` (query, texto): estado de prueba.
+  - `sla_hours` (query, float ≥ 0, default 48.0): umbral SLA.
+- **Ejemplo de respuesta:**
+```json
+{
+  "total_reports": 512,
+  "reports_within_sla": 476,
+  "reports_beyond_sla": 36
+}
+```
+- **Preguntas que responde:**
+  - ¿Cuántos reportes incumplieron el SLA hoy?
+  - ¿Qué porcentaje de reportes sigue entregándose dentro de las 48 horas?
+
+----------------------------------------------------------------------
+## 7. GET /api/v1/metrics/tests/tat-daily
+- **Objetivo:** monitorear la evolución diaria del TAT y observar la tendencia mediante promedios móviles.
+- **Explicación:** combina TAT promedio diario, conteos dentro/fuera de SLA y una serie suavizada configurable.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `customer_id`, `order_id` (query, entero)
+  - `state` (query, texto)
+  - `sla_hours` (query, float ≥ 0, default 48.0)
+  - `moving_average_window` (query, entero ≥ 1, default 7)
+- **Ejemplo de respuesta:**
+```json
+{
+  "points": [
+    {
+      "date": "2025-11-01",
+      "average_hours": 43.2,
+      "within_sla": 58,
+      "beyond_sla": 12
+    },
+    {
+      "date": "2025-11-02",
+      "average_hours": 40.1,
+      "within_sla": 61,
+      "beyond_sla": 9
+    }
+  ],
+  "moving_average_hours": [
+    {
+      "period_start": "2025-11-03",
+      "value": 41.1
+    },
+    {
+      "period_start": "2025-11-04",
+      "value": 40.6
+    }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿El TAT diario está mejorando o empeorando?
+  - ¿Cuántas pruebas cayeron fuera del SLA cada día?
+
+----------------------------------------------------------------------
+## 8. GET /api/v1/metrics/samples/overview
+- **Objetivo:** obtener KPIs y distribuciones clave de muestras.
+- **Explicación:** resume producción, estados, matrices y balance entre muestras creadas y completadas.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime): rango de creación.
+  - `customer_id`, `order_id` (query, entero)
+  - `state` (query, texto)
+- **Ejemplo de respuesta:**
+```json
+{
+  "kpis": {
+    "total_samples": 152,
+    "completed_samples": 118,
+    "pending_samples": 34
+  },
+  "by_state": [
+    { "key": "COMPLETED", "count": 118 },
+    { "key": "IN PROGRESS", "count": 26 },
+    { "key": "REGISTERED", "count": 8 }
+  ],
+  "by_matrix_type": [
+    { "key": "Blood", "count": 74 },
+    { "key": "Plant", "count": 52 },
+    { "key": "Other", "count": 26 }
+  ],
+  "created_vs_completed": [
+    { "key": "created", "count": 152 },
+    { "key": "completed", "count": 118 }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Cuántas muestras siguen pendientes por matriz?
+  - ¿Qué tan alineada está la producción versus las muestras completadas?
+
+----------------------------------------------------------------------
+## 9. GET /api/v1/metrics/tests/overview
+- **Objetivo:** visualizar el estado global de las pruebas y su distribución por estado y label.
+- **Explicación:** combina KPIs con conteos agrupados por estado y etiquetas cortas (label_abbr).
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `customer_id`, `order_id` (query, entero)
+  - `state` (query, texto)
+  - `batch_id` (query, entero): restringe a un batch.
+- **Ejemplo de respuesta:**
+```json
+{
+  "kpis": {
+    "total_tests": 620,
+    "completed_tests": 510,
+    "pending_tests": 110
+  },
+  "by_state": [
+    { "key": "REPORTED", "count": 480 },
+    { "key": "COMPLETED", "count": 30 },
+    { "key": "IN PROGRESS", "count": 70 },
+    { "key": "ON HOLD", "count": 40 }
+  ],
+  "by_label": [
+    { "key": "PCR", "count": 210 },
+    { "key": "CN", "count": 160 },
+    { "key": "TP", "count": 120 },
+    { "key": "OTROS", "count": 130 }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Cuál es el estado actual de las pruebas en un batch específico?
+  - ¿Qué etiquetas concentran más carga de trabajo?
+
+----------------------------------------------------------------------
+## 10. GET /api/v1/metrics/tests/tat
+- **Objetivo:** estudiar el turnaround time consolidado, su distribución y serie temporal.
+- **Explicación:** ofrece métricas estadísticos (promedio, mediana, p95), buckets y series agrupadas opcionalmente por día/semana.
+- **Parámetros:**
+  - `date_created_from`, `date_created_to` (query, datetime): rango sobre `date_created`.
+  - `customer_id`, `order_id` (query, entero)
+  - `state` (query, texto)
+  - `group_by` (query, regex `day|week`): agrega serie temporal por intervalo.
+- **Ejemplo de respuesta:**
+```json
+{
+  "metrics": {
+    "average_hours": 45.5,
+    "median_hours": 38.0,
+    "p95_hours": 92.0,
+    "completed_within_sla": 210,
+    "completed_beyond_sla": 34
+  },
+  "distribution": [
+    { "label": "0-24h", "count": 48 },
+    { "label": "24-48h", "count": 132 },
+    { "label": "48-72h", "count": 51 },
+    { "label": "72h+", "count": 13 }
+  ],
+  "series": [
+    { "period_start": "2025-10-27", "value": 40.2 },
+    { "period_start": "2025-11-03", "value": 46.8 }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Cuál es el p95 del TAT para pruebas PCR?
+  - ¿Cómo evoluciona el TAT semanal tras un cambio operativo?
+
+----------------------------------------------------------------------
+## 11. GET /api/v1/metrics/tests/tat-breakdown
+- **Objetivo:** comparar el TAT por etiqueta o tipo de prueba.
+- **Explicación:** lista cada label con sus métricas promedio/mediana/p95 y total de pruebas.
+- **Parámetros:**
+  - `date_created_from`, `date_created_to` (query, datetime)
+- **Ejemplo de respuesta:**
+```json
+{
+  "breakdown": [
+    {
+      "label": "CN",
+      "average_hours": 40.1,
+      "median_hours": 34.0,
+      "p95_hours": 80.0,
+      "total_tests": 185
+    },
+    {
+      "label": "PCR",
+      "average_hours": 47.8,
+      "median_hours": 39.6,
+      "p95_hours": 96.0,
+      "total_tests": 210
+    }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué tipo de prueba es más lento en completarse?
+  - ¿Cuál es el p95 de TAT por label?
+
+----------------------------------------------------------------------
+## 12. GET /api/v1/metrics/common/filters
+- **Objetivo:** entregar catálogos básicos para poblar filtros en dashboards/UI.
+- **Explicación:** lista clientes, estados de muestras/pruebas y la última fecha de actualización.
+- **Parámetros:** no aplica.
+- **Ejemplo de respuesta:**
+```json
+{
+  "customers": [
+    { "id": 10, "name": "Evergreen Labs" },
+    { "id": 41, "name": "Eco Labs" }
+  ],
+  "sample_states": ["REGISTERED", "IN PROGRESS", "COMPLETED"],
+  "test_states": ["IN PROGRESS", "ON HOLD", "REPORTED"],
+  "last_updated_at": "2025-11-05T16:02:00Z"
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué clientes están disponibles para filtrar?
+  - ¿Cuál fue la última vez que se actualizó cualquier prueba?
+
+----------------------------------------------------------------------
+## 13. GET /api/v1/metrics/tests/label-distribution
+- **Objetivo:** contar cuántas pruebas se registraron por cada label abreviado en un rango.
+- **Explicación:** retorna un vector de labels predeterminados (CN, MB, TP, etc.) con su conteo de pruebas.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `customer_id`, `order_id` (query, entero)
+  - `state` (query, texto)
+- **Ejemplo de respuesta:**
+```json
+{
+  "labels": [
+    { "label": "CN", "count": 160 },
+    { "label": "MB", "count": 72 },
+    { "label": "TP", "count": 54 },
+    { "label": "MY", "count": 38 }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué labels concentran la mayor carga de pruebas?
+  - ¿Cómo cambió la mezcla de labels después de una campaña?
+
+----------------------------------------------------------------------
+## 14. GET /api/v1/metrics/sync/status
+- **Objetivo:** conocer la última sincronización exitosa por entidad.
+- **Explicación:** lee la tabla `sync_checkpoints` y devuelve la fecha de actualización por entidad (`customers`, `orders`, `samples`, `batches`, `tests`).
+- **Parámetros:**
+  - `entity` (query, texto, default `tests`): nombre de la entidad en `sync_checkpoints`.
+- **Ejemplo de respuesta:**
+```json
+{
+  "entity": "tests",
+  "updated_at": "2025-11-05T15:58:30Z"
+}
+```
+- **Preguntas que responde:**
+  - ¿Cuándo se sincronizaron por última vez las pruebas?
+  - ¿Qué entidad necesito refrescar antes de ejecutar un análisis?
+
+----------------------------------------------------------------------
+## 15. GET /api/v1/analytics/orders/throughput
+- **Objetivo:** medir la tasa de órdenes creadas/completadas y su tiempo de finalización por intervalo.
+- **Explicación:** agrupa por día/semana y devuelve series y totales con promedio/mediana de duración.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `customer_id` (query, entero)
+  - `interval` (query, `day|week`, default `day`)
+- **Ejemplo de respuesta:**
+```json
+{
+  "interval": "day",
+  "points": [
+    {
+      "period_start": "2025-11-03",
+      "orders_created": 18,
+      "orders_completed": 15,
+      "average_completion_hours": 72.4,
+      "median_completion_hours": 55.0
+    },
+    {
+      "period_start": "2025-11-04",
+      "orders_created": 21,
+      "orders_completed": 17,
+      "average_completion_hours": 64.1,
+      "median_completion_hours": 48.0
+    }
+  ],
+  "totals": {
+    "orders_created": 39,
+    "orders_completed": 32,
+    "average_completion_hours": 68.0,
+    "median_completion_hours": 52.0
+  }
+}
+```
+- **Preguntas que responde:**
+  - ¿Estamos cerrando órdenes al mismo ritmo que se crean?
+  - ¿Cuál es el tiempo medio de ciclo de las órdenes por intervalo?
+
+----------------------------------------------------------------------
+## 16. GET /api/v1/analytics/samples/cycle-time
+- **Objetivo:** analizar los tiempos de ciclo de muestras completadas por intervalo y matriz.
+- **Explicación:** muestra series, totales y desgloses por `matrix_type` para detectar cuellos de botella.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime): rango de `completed_date`.
+  - `customer_id`, `order_id` (query, entero)
+  - `matrix_type`, `state` (query, texto)
+  - `interval` (query, `day|week`, default `day`)
+- **Ejemplo de respuesta:**
+```json
+{
+  "interval": "week",
+  "points": [
+    {
+      "period_start": "2025-10-27",
+      "completed_samples": 62,
+      "average_cycle_hours": 98.4,
+      "median_cycle_hours": 84.0
+    }
+  ],
+  "totals": {
+    "completed_samples": 62,
+    "average_cycle_hours": 98.4,
+    "median_cycle_hours": 84.0
+  },
+  "by_matrix_type": [
+    {
+      "matrix_type": "Blood",
+      "completed_samples": 28,
+      "average_cycle_hours": 72.0
+    },
+    {
+      "matrix_type": "Plant",
+      "completed_samples": 12,
+      "average_cycle_hours": 110.5
+    }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué matrices tardan más en completarse?
+  - ¿Cómo varía el ciclo de muestras por semana?
+
+----------------------------------------------------------------------
+## 17. GET /api/v1/analytics/orders/funnel
+- **Objetivo:** visualizar el embudo de estados de órdenes dentro del rango.
+- **Explicación:** agrupa las órdenes por etapas operativas para identificar fugas o cuellos de botella.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `customer_id` (query, entero)
+- **Ejemplo de respuesta:**
+```json
+{
+  "total_orders": 68,
+  "stages": [
+    { "stage": "CREATED", "count": 68 },
+    { "stage": "IN PROGRESS", "count": 44 },
+    { "stage": "COMPLETED", "count": 26 },
+    { "stage": "REPORTED", "count": 22 }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Cuántas órdenes se quedan atoradas en cada etapa?
+  - ¿Cuál es la caída entre órdenes creadas y reportadas?
+
+----------------------------------------------------------------------
+## 18. GET /api/v1/analytics/orders/slowest
+- **Objetivo:** listar las órdenes más lentas según su tiempo abierto o de finalización.
+- **Explicación:** devuelve un ranking con tiempos exactos y datos de contexto para priorizar acciones correctivas.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `customer_id` (query, entero)
+  - `state` (query, texto)
+  - `limit` (query, entero ≥ 1, default 10)
+- **Ejemplo de respuesta:**
+```json
+{
+  "items": [
+    {
+      "order_id": 9051,
+      "order_reference": "ORD-2025-151",
+      "customer_name": "Prime Bio",
+      "state": "IN PROGRESS",
+      "completion_hours": null,
+      "age_hours": 220.5,
+      "date_created": "2025-10-27T09:12:00Z",
+      "date_completed": null
+    },
+    {
+      "order_id": 9032,
+      "order_reference": "ORD-2025-133",
+      "customer_name": "Green Labs",
+      "state": "REPORTED",
+      "completion_hours": 180.0,
+      "age_hours": 180.0,
+      "date_created": "2025-10-25T08:35:00Z",
+      "date_completed": "2025-10-31T20:35:00Z"
+    }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué órdenes llevan más horas abiertas?
+  - ¿Qué clientes concentran órdenes crónicamente lentas?
+
+----------------------------------------------------------------------
+## 19. GET /api/v1/analytics/orders/overdue
+- **Objetivo:** monitorear órdenes vencidas, advertencias y focos por cliente.
+- **Explicación:** combina KPIs, listas detalladas, timeline, heatmap y muestras/listas de tests asociadas para priorizar recuperación.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `interval` (query, `day|week`, default `week`)
+  - `min_days_overdue` (query, entero ≥ 0, default 30)
+  - `warning_window_days` (query, entero ≥ 0, default 5)
+  - `sla_hours` (query, float ≥ 0, default 48.0)
+  - `top_limit`, `client_limit`, `warning_limit` (query, entero 1–200, default 20)
+- **Ejemplo de respuesta:**
+```json
+{
+  "interval": "week",
+  "minimum_days_overdue": 30,
+  "warning_window_days": 5,
+  "sla_hours": 48.0,
+  "kpis": {
+    "total_overdue": 12,
+    "average_open_hours": 215.3,
+    "max_open_hours": 402.0,
+    "percent_overdue_vs_active": 0.22,
+    "overdue_beyond_sla": 9,
+    "overdue_within_sla": 3
+  },
+  "top_orders": [
+    {
+      "order_id": 9001,
+      "custom_formatted_id": "ORD-2025-101",
+      "customer_id": 41,
+      "customer_name": "Eco Labs",
+      "state": "IN PROGRESS",
+      "date_created": "2025-09-25T10:11:00Z",
+      "open_hours": 930.5,
+      "total_samples": 6,
+      "incomplete_sample_count": 4,
+      "incomplete_samples": [
+        {
+          "sample_id": 18002,
+          "sample_custom_id": "SMP-18002",
+          "sample_name": "Leaf Mix 1",
+          "matrix_type": "Plant",
+          "total_tests": 6,
+          "incomplete_tests": 3,
+          "tests": [
+            {
+              "primary_test_id": 45001,
+              "test_ids": [45001, 45002],
+              "label_abbr": "MB",
+              "states": ["IN PROGRESS", "ON HOLD"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "customer_id": 41,
+      "customer_name": "Eco Labs",
+      "overdue_orders": 5,
+      "total_open_hours": 3100.0,
+      "average_open_hours": 620.0,
+      "max_open_hours": 930.5
+    }
+  ],
+  "warning_orders": [
+    {
+      "order_id": 9070,
+      "custom_formatted_id": "ORD-2025-170",
+      "customer_id": 55,
+      "customer_name": "Prime Bio",
+      "state": "IN PROGRESS",
+      "date_created": "2025-10-10T12:45:00Z",
+      "open_hours": 700.0,
+      "total_samples": 3,
+      "incomplete_sample_count": 2,
+      "incomplete_samples": []
+    }
+  ],
+  "timeline": [
+    { "period_start": "2025-10-06", "overdue_orders": 6 },
+    { "period_start": "2025-10-13", "overdue_orders": 9 }
+  ],
+  "heatmap": [
+    { "customer_id": 41, "customer_name": "Eco Labs", "period_start": "2025-10-13", "overdue_orders": 4 }
+  ],
+  "state_breakdown": [
+    { "state": "IN PROGRESS", "count": 7, "ratio": 0.58 },
+    { "state": "ON HOLD", "count": 5, "ratio": 0.42 }
+  ],
+  "ready_to_report_samples": [
+    {
+      "sample_id": 22011,
+      "sample_name": "Soil Sample 9",
+      "sample_custom_id": "SMP-22011",
+      "order_id": 9001,
+      "order_custom_id": "ORD-2025-101",
+      "customer_id": 41,
+      "customer_name": "Eco Labs",
+      "date_created": "2025-09-25T11:00:00Z",
+      "completed_date": "2025-10-01T08:00:00Z",
+      "tests_ready_count": 2,
+      "tests_total_count": 4
+    }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué órdenes están fuera de SLA y cuáles requieren escalamiento?
+  - ¿Qué clientes concentran la mayor cantidad de órdenes atrasadas?
+
+----------------------------------------------------------------------
+## 20. GET /api/v1/analytics/customers/alerts
+- **Objetivo:** detectar clientes con mayor riesgo operativo (tests ON HOLD, no reportables o fuera de SLA).
+- **Explicación:** genera un heatmap por periodo y una lista priorizada de clientes con ratios de alerta y actividad reciente.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `customer_id` (query, entero)
+  - `interval` (query, `day|week`, default `week`)
+  - `sla_hours` (query, float ≥ 0, default 48.0)
+  - `min_alert_percentage` (query, float 0–1, default 0.1)
+- **Ejemplo de respuesta:**
+```json
+{
+  "interval": "week",
+  "sla_hours": 48.0,
+  "min_alert_percentage": 0.1,
+  "heatmap": [
+    {
+      "customer_id": 41,
+      "customer_name": "Eco Labs",
+      "period_start": "2025-10-20",
+      "total_tests": 120,
+      "on_hold_tests": 18,
+      "not_reportable_tests": 5,
+      "sla_breach_tests": 22,
+      "on_hold_ratio": 0.15,
+      "not_reportable_ratio": 0.04,
+      "sla_breach_ratio": 0.18
+    }
+  ],
+  "alerts": [
+    {
+      "customer_id": 41,
+      "customer_name": "Eco Labs",
+      "orders_total": 42,
+      "orders_on_hold": 6,
+      "orders_beyond_sla": 5,
+      "tests_total": 320,
+      "tests_on_hold": 38,
+      "tests_not_reportable": 12,
+      "tests_beyond_sla": 45,
+      "primary_reason": "tests_beyond_sla",
+      "primary_ratio": 0.14,
+      "latest_activity_at": "2025-11-05T10:05:00Z"
+    }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué clientes necesitan intervención inmediata por calidad?
+  - ¿En qué semanas un cliente superó el umbral de alertas?
+
+----------------------------------------------------------------------
+## 21. GET /api/v1/analytics/tests/state-distribution
+- **Objetivo:** ver la mezcla de estados de pruebas a lo largo del tiempo.
+- **Explicación:** entrega un stacked series por intervalo y totales globales para cuantificar cargas en cada estado.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `customer_id`, `order_id` (query, entero)
+  - `interval` (query, `day|week`, default `week`)
+- **Ejemplo de respuesta:**
+```json
+{
+  "interval": "week",
+  "states": ["IN PROGRESS", "ON HOLD", "REPORTED"],
+  "series": [
+    {
+      "period_start": "2025-10-20",
+      "total_tests": 180,
+      "buckets": [
+        { "state": "IN PROGRESS", "count": 90 },
+        { "state": "ON HOLD", "count": 30 },
+        { "state": "REPORTED", "count": 60 }
+      ]
+    }
+  ],
+  "totals": [
+    { "state": "IN PROGRESS", "count": 90 },
+    { "state": "ON HOLD", "count": 30 },
+    { "state": "REPORTED", "count": 60 }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué proporción de pruebas permanece en ON HOLD semana a semana?
+  - ¿Cuándo se liberó una ola de pruebas hacia REPORTED?
+
+----------------------------------------------------------------------
+## 22. GET /api/v1/analytics/kpis/quality
+- **Objetivo:** consolidar KPIs de calidad para pruebas y órdenes respecto al SLA.
+- **Explicación:** devuelve métricas de volúmenes, ratios ON HOLD / no reportable y cumplimiento SLA en ambos niveles.
+- **Parámetros:**
+  - `date_from`, `date_to` (query, datetime)
+  - `customer_id`, `order_id` (query, entero)
+  - `sla_hours` (query, float ≥ 0, default 48.0)
+- **Ejemplo de respuesta:**
+```json
+{
+  "sla_hours": 48.0,
+  "tests": {
+    "total_tests": 420,
+    "on_hold_tests": 32,
+    "not_reportable_tests": 6,
+    "cancelled_tests": 4,
+    "reported_tests": 360,
+    "within_sla_tests": 330,
+    "beyond_sla_tests": 90,
+    "on_hold_ratio": 0.076,
+    "not_reportable_ratio": 0.014,
+    "beyond_sla_ratio": 0.214
+  },
+  "orders": {
+    "total_orders": 160,
+    "on_hold_orders": 12,
+    "completed_orders": 120,
+    "within_sla_orders": 108,
+    "beyond_sla_orders": 52,
+    "on_hold_ratio": 0.075,
+    "beyond_sla_ratio": 0.325
+  }
+}
+```
+- **Preguntas que responde:**
+  - ¿Qué porcentaje de pruebas quebró el SLA?
+  - ¿Cuál es la tasa de órdenes en ON HOLD para un cliente?
+
+----------------------------------------------------------------------
+## 23. GET /api/v1/entities/samples/{sample_id}
+- **Objetivo:** consultar el detalle completo de una muestra, incluyendo orden y batches vinculados.
+- **Explicación:** retorna campos crudos y enriquecidos para análisis puntuales o resolución de omisiones en la sincronización.
+- **Parámetros:**
+  - `sample_id` (path, entero requerido): identificador de la muestra.
+- **Ejemplo de respuesta:**
+```json
+{
+  "id": 18002,
+  "sample_name": "Leaf Mix 1",
+  "custom_formatted_id": "SMP-18002",
+  "order_id": 9001,
+  "has_report": false,
+  "batch_ids": [501, 502],
+  "completed_date": null,
+  "date_created": "2025-09-25T11:00:00Z",
+  "start_date": "2025-09-25T12:00:00Z",
+  "matrix_type": "Plant",
+  "state": "IN PROGRESS",
+  "test_count": 6,
+  "raw_payload": { "source": "qbench", "payload_version": "1.4.0" },
+  "order": {
+    "id": 9001,
+    "custom_formatted_id": "ORD-2025-101",
+    "state": "IN PROGRESS",
+    "customer_name": "Eco Labs"
+  },
+  "batches": [
+    { "id": 501, "display_name": "Batch-PLT-22" },
+    { "id": 502, "display_name": "Batch-PLT-23" }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Cuáles batches están asociados a esta muestra atrasada?
+  - ¿Qué estado y payload original tiene la muestra 18002?
+
+----------------------------------------------------------------------
+## 24. GET /api/v1/entities/tests/{test_id}
+- **Objetivo:** revisar el detalle completo de un test, su muestra y batches.
+- **Explicación:** permite investigar fallas puntuales mostrando worksheet, estado, label y dependencias.
+- **Parámetros:**
+  - `test_id` (path, entero requerido)
+- **Ejemplo de respuesta:**
+```json
+{
+  "id": 45001,
+  "sample_id": 18002,
+  "batch_ids": [501],
+  "date_created": "2025-09-25T12:30:00Z",
+  "state": "ON HOLD",
+  "has_report": false,
+  "report_completed_date": null,
+  "label_abbr": "MB",
+  "title": "Microbial Load",
+  "worksheet_raw": { "fields": { "cfu": null } },
+  "raw_payload": { "id": 45001, "source": "qbench" },
+  "sample": {
+    "id": 18002,
+    "sample_name": "Leaf Mix 1",
+    "state": "IN PROGRESS"
+  },
+  "batches": [
+    { "id": 501, "display_name": "Batch-PLT-22" }
+  ]
+}
+```
+- **Preguntas que responde:**
+  - ¿Este test ya cuenta con worksheet y en qué estado se encuentra?
+  - ¿Qué muestra y batch debo revisar para destrabar el test 45001?
+

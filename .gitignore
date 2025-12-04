@@ -1,0 +1,82 @@
+# General ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.class
+*.pyo
+*.pyd
+.Python
+.DS_Store
+Thumbs.db
+*.log
+logs/
+*.tmp
+*.bak
+
+# Virtual environments / local env files -----------------------------------
+.venv/
+.env
+.env.*
+!.env.example
+.env.local
+.python-version
+
+# Build / packaging artifacts ----------------------------------------------
+build/
+dist/
+downloads/
+sdist/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+develop-eggs/
+parts/
+var/
+lib/
+lib64/
+
+# Installer/PyInstaller leftovers ------------------------------------------
+pip-log.txt
+pip-delete-this-directory.txt
+*.manifest
+*.spec
+
+# Test / coverage cache ----------------------------------------------------
+.pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+.cache/
+.coverage
+.coverage.*
+coverage.xml
+nosetests.xml
+*.cover
+
+# Type checker caches ------------------------------------------------------
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+# Editors / tooling --------------------------------------------------------
+.vscode/
+.idea/
+
+# Jupyter ------------------------------------------------------------------
+.ipynb_checkpoints
+
+# Databases / dumps --------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+
+# Frontend artifacts -------------------------------------------------------
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Generated files kept intentionally (allowlists) --------------------------
+!frontend/*.json
+!frontend/**/*.json
+!frontend/src/lib/

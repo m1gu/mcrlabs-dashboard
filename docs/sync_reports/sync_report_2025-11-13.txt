@@ -1,0 +1,7 @@
+Fecha de la actualizacion: 2025-11-13
+Items skipped
+customers: nuevos=79 skipped=[]
+orders: nuevos=150 skipped=[]
+samples: nuevos=852 skipped=[]
+batches: nuevos=469 skipped=[]
+tests: nuevos=3130 skipped=[]
