@@ -1,0 +1,36 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Environments and local settings
+.venv/
+.env
+.env.*
+!.env.example
+.python-version
+
+# VCS / editors
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+*.log
+logs/
+
+# Frontend artifacts
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+
+# OS files
+.DS_Store
+Thumbs.db

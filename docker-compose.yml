@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Ajusta si la API pública vive en otro host
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    env_file:
+      - .env
+    environment:
+      PORT: ${PORT:-8000}
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-qbench}
+      POSTGRES_USER: ${POSTGRES_USER:-qbench}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qbench}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-qbench} -d ${POSTGRES_DB:-qbench}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
