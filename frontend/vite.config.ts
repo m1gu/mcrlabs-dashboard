@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
   const apiBaseUrl = env.API_BASE_URL || env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
 
   return {
+    base: '/dashboard/',
     plugins: [react()],
     server: {
       port: 5177,

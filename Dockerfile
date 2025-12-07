@@ -36,7 +36,6 @@ COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY README.md ./README.md
 COPY docs/ ./docs/
-COPY .env.example ./.env.example
 
 # Artefactos del frontend generados en la etapa previa
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist

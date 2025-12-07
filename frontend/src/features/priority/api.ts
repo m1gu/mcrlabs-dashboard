@@ -69,14 +69,16 @@ interface OverdueOrdersResponse {
       total_tests: number
       incomplete_tests: number
       tests: Array<{
-        test_id: number
+        primary_test_id: number
+        test_ids: number[]
         label_abbr: string | null
-        state: string | null
+        states: string[] | null
       }>
     }>
   }>
   ready_to_report_samples: Array<{
     sample_id: number
+    sample_custom_id: string | null
     sample_name: string | null
     order_custom_id: string | null
     customer_name: string | null

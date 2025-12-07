@@ -3,7 +3,6 @@ import * as React from 'react'
 import {
   formatApiDateTimeUtc,
   formatDateInput,
-  formatDateLabel,
   formatDateTimeLabel,
   formatHoursToDuration,
   formatNumber,
@@ -206,7 +205,7 @@ export function TatOrdersTab() {
                         {order.isOutlier ? <span className="priority__slow-flag">Outlier</span> : null}
                       </div>
                     </td>
-                    <td>{formatNumber(order.openTimeHours, 1)}</td>
+                    <td>{formatNumber(order.openTimeHours)}</td>
                     <td>{order.samplesCount}</td>
                     <td>{order.testsCount}</td>
                   </tr>
