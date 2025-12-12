@@ -12,6 +12,9 @@ logs/
 *.tmp
 *.bak
 
+credentials/
+backup-db/
+
 # Virtual environments / local env files -----------------------------------
 .venv/
 .env

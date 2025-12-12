@@ -1,29 +1,32 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { OverviewTab } from './features/overview/OverviewTab'
-import { PriorityOrdersTab } from './features/priority/PriorityOrdersTab'
-import { TatOrdersTab } from './features/tat/TatOrdersTab'
-import { DashboardPage } from './pages/DashboardPage'
+import { DashboardGlimsPage } from './pages/DashboardGlimsPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
+import { GlimsOverviewTab } from './features/glimsOverview/GlimsOverviewTab'
+import { PrioritySamplesTab } from './features/prioritySamples/PrioritySamplesTab'
 
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/glims" replace />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
-        path="/dashboard"
+        path="/glims"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <DashboardGlimsPage />
           </ProtectedRoute>
         }
       >
-        <Route index element={<OverviewTab />} />
-        <Route path="priority-orders" element={<PriorityOrdersTab />} />
-        <Route path="tat-orders" element={<TatOrdersTab />} />
+        <Route index element={<Navigate to="overview" replace />} />
+        <Route path="overview" element={<GlimsOverviewTab />} />
+        <Route path="priority" element={<PrioritySamplesTab />} />
       </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Compat: old absolute paths pointing to /dashboard-glims/... */}
+      <Route path="/dashboard-glims" element={<Navigate to="/glims" replace />} />
+      <Route path="/dashboard-glims/overview" element={<Navigate to="/glims/overview" replace />} />
+      <Route path="/dashboard-glims/priority" element={<Navigate to="/glims/priority" replace />} />
+      <Route path="*" element={<Navigate to="/glims" replace />} />
     </Routes>
   )
 }

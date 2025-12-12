@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from downloader_qbench_data.config import get_settings
 from .routers import analytics, entities, metrics, auth as auth_router
+from .routers import glims_overview, glims_priority
 
 LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +59,8 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router, prefix="/api/v1")
     app.include_router(analytics.router, prefix="/api/v1")
     app.include_router(entities.router, prefix="/api/v1")
+    app.include_router(glims_overview.router)
+    app.include_router(glims_priority.router)
 
     frontend_dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
     if frontend_dist.exists():

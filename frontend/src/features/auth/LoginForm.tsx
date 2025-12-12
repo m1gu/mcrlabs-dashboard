@@ -13,7 +13,7 @@ type LocationState = {
 export function LoginForm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const from = (location.state as LocationState | null)?.from?.pathname || '/dashboard'
+  const from = (location.state as LocationState | null)?.from?.pathname || '/dashboard-glims'
 
   const { login, isExpiringSoon } = useAuth()
   const [username, setUsername] = useState('')

@@ -1,12 +1,12 @@
-import { API_V1_BASE_URL } from '../config'
+import { API_V1_BASE_URL, API_V2_BASE_URL } from '../config'
 import { clearStoredAuth, getAuthToken } from '../features/auth/authStorage'
 
 type QueryValue = string | number | boolean | undefined | null
 
 type QueryParams = Record<string, QueryValue>
 
-function buildUrl(path: string, params?: QueryParams): string {
-  const base = API_V1_BASE_URL.endsWith('/') ? API_V1_BASE_URL.slice(0, -1) : API_V1_BASE_URL
+function buildUrl(path: string, params: QueryParams | undefined, baseUrl: string): string {
+  const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   let url = `${base}${normalizedPath}`
 
@@ -26,7 +26,15 @@ function buildUrl(path: string, params?: QueryParams): string {
 }
 
 export async function apiFetch<T>(path: string, params?: QueryParams, init?: RequestInit): Promise<T> {
-  const url = buildUrl(path, params)
+  return apiFetchBase<T>(API_V1_BASE_URL, path, params, init)
+}
+
+export async function apiFetchV2<T>(path: string, params?: QueryParams, init?: RequestInit): Promise<T> {
+  return apiFetchBase<T>(API_V2_BASE_URL, path, params, init)
+}
+
+async function apiFetchBase<T>(baseUrl: string, path: string, params?: QueryParams, init?: RequestInit): Promise<T> {
+  const url = buildUrl(path, params, baseUrl)
   const headers = new Headers(init?.headers ?? {})
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json')
