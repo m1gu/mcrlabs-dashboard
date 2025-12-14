@@ -74,7 +74,8 @@ def get_most_overdue_samples(
             SELECT '{label}' AS label,
                    sample_id,
                    {start_col}::date AS start_date,
-                   analytes
+                   analytes,
+                   status
             FROM {table}
             """
         )
@@ -97,6 +98,7 @@ def get_most_overdue_samples(
                 s.client_name,
                 s.dispensary_id,
                 d.name AS dispensary_name,
+                s.status,
                 s.date_received,
                 s.report_date,
                 COALESCE(ta.tests_total, 0) AS tests_total,
@@ -130,7 +132,7 @@ def get_most_overdue_samples(
 
     # Fetch tests for these samples
     tests_sql = f"""
-        SELECT t.sample_id, t.label, t.start_date, (t.analytes IS NOT NULL) AS complete
+        SELECT t.sample_id, t.label, t.start_date, (t.analytes IS NOT NULL) AS complete, t.status
         FROM ({tests_union_sql}) t
         WHERE t.sample_id = ANY(:sample_ids)
     """
@@ -138,7 +140,7 @@ def get_most_overdue_samples(
     tests_by_sample: dict[str, list[PriorityTestItem]] = {}
     for t in tests_rows:
         tests_by_sample.setdefault(t.sample_id, []).append(
-            PriorityTestItem(label=t.label, start_date=t.start_date, complete=bool(t.complete))
+            PriorityTestItem(label=t.label, start_date=t.start_date, complete=bool(t.complete), status=t.status)
         )
 
     samples: list[PrioritySampleItem] = []
@@ -155,6 +157,7 @@ def get_most_overdue_samples(
                 tests_total=row.tests_total,
                 tests_complete=row.tests_complete,
                 tests=tests_by_sample.get(row.sample_id, []),
+                status=row.status,
             )
         )
     return PrioritySampleResponse(samples=samples)
@@ -176,7 +179,7 @@ def get_overdue_heatmap(
     sql = f"""
         WITH tests_union AS (
             { " UNION ALL ".join(
-                f"SELECT sample_id, analytes FROM {table}" for table, _ in ASSAY_START_MAP.values()
+                f"SELECT sample_id, analytes, status FROM {table}" for table, _ in ASSAY_START_MAP.values()
             ) }
         ),
         tests_agg AS (

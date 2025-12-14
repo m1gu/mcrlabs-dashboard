@@ -84,11 +84,11 @@ export function PrioritySamplesTab() {
                 <span />
                 <span>Sample</span>
                 <span>Customer</span>
-                <span>Status</span>
                 <span>Received</span>
                 <span>Open time</span>
                 <span>TAT breach</span>
                 <span>Tests</span>
+                <span>Status</span>
               </div>
               {data.samples.map((sample) => {
                 const openLabel = sample.openHours != null ? formatHoursToDuration(sample.openHours) : '--'
@@ -106,17 +106,17 @@ export function PrioritySamplesTab() {
                     } ${tatBreach ? 'priority__accordion-item--breach' : ''}`}
                   >
                     <button type="button" className="priority__accordion-trigger" onClick={toggle}>
-                      <div className="priority__sample-row priority__sample-row--single">
-                        <span className={`priority__chevron ${expanded ? 'is-open' : ''}`}>{expanded ? '▾' : '▸'}</span>
+                      <div className="priority__sample-row">
+                        <span className={`priority__chevron ${expanded ? 'is-open' : ''}`}>{expanded ? '?' : '?'}</span>
                         <span className="priority__metrc-sample-id">{sample.sampleId}</span>
-                        <span className="priority__cell--ellipsis">{sample.clientName || sample.dispensaryName || '--'}</span>
-                        <StatusPill value={sample.status} />
+                        <span>{sample.clientName || sample.dispensaryName || '--'}</span>
                         <span>{receivedLabel}</span>
                         <span>{openLabel}</span>
                         <span className={`priority__sla-chip ${tatBreach ? 'priority__sla-chip--breach' : ''}`}>
                           {tatBreach ? 'Yes' : 'No'}
                         </span>
                         <span className="priority__pill">{completion} tests</span>
+                        <StatusPill value={sample.status} />
                       </div>
                     </button>
                     {expanded && (

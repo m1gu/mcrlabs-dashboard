@@ -17,7 +17,7 @@ import json
 import os
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 import gspread
 import logging
@@ -253,13 +253,14 @@ def normalize_disp_name(name: str) -> str:
 
 
 def normalize_sample_id(raw: str) -> str:
-    """Strip trailing HO / numeric suffixes to match glims_samples.sample_id."""
+    """Strip only special HO / -N suffixes to match glims_samples.sample_id."""
 
     if not raw:
         return ""
     sid = raw.strip()
-    # Remove known suffixes: -HO1, -HO2, -HO1-1, -HO2-1, -1, -2, -N, etc.
-    sid = re.sub(r"(-(HO\d+(?:-\d+)?)|-\d+|-N)$", "", sid, flags=re.IGNORECASE)
+    # Remove HO suffix variants (e.g. -HO1, -HO2-1) and -N
+    sid = re.sub(r"-(HO\d+(?:-\d+)?)$", "", sid, flags=re.IGNORECASE)
+    sid = re.sub(r"-N$", "", sid, flags=re.IGNORECASE)
     return sid or raw.strip()
 
 
@@ -349,6 +350,18 @@ def load_dispensary_map(engine: Engine) -> dict[str, int]:
 def upsert_overview(engine: Engine, df: pd.DataFrame, lookback_days: int | None, dispensary_map: dict[str, int]) -> set[str]:
     if df.empty or "SampleID" not in df.columns:
         return set()
+    required_groups = [
+        ["SampleID"],
+        ["DateReceived"],
+        ["Client"],
+        ["SampleName"],
+        ["Matrix"],
+        ["RequestedTesting"],
+        ["Status"],
+        ["Adult Use / Medical", "Adult Use/Medical"],
+        ["Gross Weight (g)"],
+        ["Sample Double Checked (Initials)"],
+    ]
     df["DateReceived_ts"] = df["DateReceived"].apply(to_ts)
     if lookback_days is not None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
@@ -359,6 +372,8 @@ def upsert_overview(engine: Engine, df: pd.DataFrame, lookback_days: int | None,
     for _, row in df.iterrows():
         sample_id = str(row.get("SampleID") or "").strip()
         if not sample_id:
+            continue
+        if not all(any(not _is_blank(row.get(col)) for col in group) for group in required_groups):
             continue
         sample_ids.add(sample_id)
         payload = {
@@ -375,7 +390,6 @@ def upsert_overview(engine: Engine, df: pd.DataFrame, lookback_days: int | None,
             "serving_size_g": to_num(row.get("Serving Size (g)")),
             "servings_per_package": to_num(row.get("Servings Per Package")),
             "case_narrative_codes": row.get("Case Narrative and Qualifier Codes"),
-            "status": row.get("Status"),
             "initials": row.get("Initials"),
             "report_date": to_date_only(row.get("ReportDate")),
             "notes": row.get("Notes"),
@@ -397,14 +411,12 @@ def upsert_overview(engine: Engine, df: pd.DataFrame, lookback_days: int | None,
             "homogeneity_flag": row.get("HomogeneityTesting(HO)"),
             "leafworks_flag": row.get("Leafworks (LW)"),
             "compliance_randd": row.get("Compliance/R&D"),
-            "adult_use_medical": row.get("Adult Use/Medical"),
             "tests_completed": to_bool(row.get("TestsCompleted?(1=yes,0=no)")),
             "metrc_id": row.get("METRC ID"),
             "client_source_batch": row.get("Client Source Batch"),
             "storage_code": row.get("StorageCode"),
             "sciops_cn_mb": row.get("SciOps:CN/MB"),
             "net_weight_g": to_num(row.get("Net Weight (g)")),
-            "gross_weight_g": to_num(row.get("Gross Weight (g)")),
             "revnum": row.get("RevNum"),
             "runlist_priority": row.get("Runlist Priority, 1 = expedited , 2 = normal , 3= hold"),
             "number_units_received": to_num(row.get("Number of Units Received")),
@@ -416,6 +428,9 @@ def upsert_overview(engine: Engine, df: pd.DataFrame, lookback_days: int | None,
             "sampling_by_mcr": row.get("Sampling by MCR (Y/N)"),
             "sample_double_checked": row.get("Sample Double Checked (Initials)"),
             "cc_sample_id": row.get("CC Sample ID"),
+            "status": row.get("Status"),
+            "adult_use_medical": row.get("Adult Use / Medical"),
+            "gross_weight_g": to_num(row.get("Gross Weight (g)")),
         }
         client_val = str(row.get("Client") or "").strip().lower()
         disp_name = client_val  # usamos el nombre del cliente para mapear dispensary_id
@@ -440,11 +455,14 @@ def upsert_overview(engine: Engine, df: pd.DataFrame, lookback_days: int | None,
 def upsert_reruns(engine: Engine, df: pd.DataFrame, sample_ids: set[str]) -> None:
     if df.empty or "Sample ID" not in df.columns:
         return
-    rows = []
+    # Allow reruns only for samples that exist either in this sync batch (sample_ids) or already in DB
+    candidate_ids: set[str] = set()
+    rows: list[dict[str, Any]] = []
     for _, row in df.iterrows():
         sid = str(row.get("Sample ID") or "").strip()
-        if not sid or (sample_ids and sid not in sample_ids):
+        if not sid:
             continue
+        candidate_ids.add(sid)
         rows.append(
             {
                 "date": to_date(row.get("Date")),
@@ -457,12 +475,27 @@ def upsert_reruns(engine: Engine, df: pd.DataFrame, sample_ids: set[str]) -> Non
         )
     if not rows:
         return
+
+    allowed_ids = set(sample_ids)
+    missing = list(candidate_ids - allowed_ids)
+    if missing:
+        with engine.begin() as conn:
+            existing = conn.execute(
+                text("SELECT sample_id FROM glims_samples WHERE sample_id = ANY(:ids)"),
+                {"ids": missing},
+            ).scalars()
+            allowed_ids.update(existing)
+
+    filtered_rows = [r for r in rows if r["sample_id"] in allowed_ids]
+    if not filtered_rows:
+        return
+
     sql = """
         INSERT INTO glims_reruns (date, assay, sample_id, rerun_code, resolution, notes)
         VALUES (:date, :assay, :sample_id, :rerun_code, :resolution, :notes)
     """
     with engine.begin() as conn:
-        conn.execute(text(sql), rows)
+        conn.execute(text(sql), filtered_rows)
 
 
 def upsert_runlists(engine: Engine, df: pd.DataFrame) -> None:
@@ -493,15 +526,46 @@ def split_fields(row: Mapping[str, Any], known: Iterable[str], id_field: str) ->
     return main, analytes
 
 
-def upsert_generic_assay(engine: Engine, df: pd.DataFrame, sample_ids: set[str], table: str, mapping: dict[str, str], analyte_cols: Iterable[str] | None = None) -> None:
+def _has_required_fields(row: Mapping[str, Any], cols: Sequence[str]) -> bool:
+    for col in cols:
+        val = row.get(col)
+        if _is_blank(val):
+            return False
+    return True
+
+
+def _is_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    try:
+        import math
+        return isinstance(value, float) and math.isnan(value)
+    except Exception:
+        return False
+
+
+def upsert_generic_assay(
+    engine: Engine,
+    df: pd.DataFrame,
+    sample_ids: set[str],
+    table: str,
+    mapping: dict[str, str],
+    analyte_cols: Iterable[str] | None = None,
+    required_src_cols: Sequence[str] | None = None,
+) -> None:
     if df.empty or "Sample ID" not in df.columns:
         return
     rows = []
     known_src = list(mapping.values())
+    candidate_ids: set[str] = set()
     for _, row in df.iterrows():
         raw_sid = str(row.get("Sample ID") or "").strip()
         clean_sid = normalize_sample_id(raw_sid)
         if not clean_sid:
+            continue
+        if required_src_cols and not _has_required_fields(row, required_src_cols):
             continue
         # require start date
         start_dt = extract_start_date(row, mapping)
@@ -525,15 +589,46 @@ def upsert_generic_assay(engine: Engine, df: pd.DataFrame, sample_ids: set[str],
         if analyte_cols is not None:
             analytes = {k: v for k, v in analytes.items() if k in analyte_cols}
         payload["analytes"] = json.dumps(analytes) if analytes else None
+        payload["status"] = "Completed" if payload.get("analytes") else "Batched"
         rows.append(payload)
+        candidate_ids.add(clean_sid)
     if not rows:
         return
+
+    allowed_ids = set(sample_ids)
+    missing = list(candidate_ids - allowed_ids)
+    if missing:
+        with engine.begin() as conn:
+            existing = conn.execute(
+                text("SELECT sample_id FROM glims_samples WHERE sample_id = ANY(:ids)"),
+                {"ids": missing},
+            ).scalars()
+            allowed_ids.update(existing)
+    # If no allowed_ids, skip inserting to avoid FK errors
+    rows = [r for r in rows if r["sample_id"] in allowed_ids]
+    if not rows:
+        return
+
     cols = rows[0].keys()
+    update_parts = []
+    for c in cols:
+        if c == "sample_id":
+            continue
+        if c == "status":
+            update_parts.append(
+                f"status = CASE "
+                f"WHEN {table}.status = 'Completed' THEN {table}.status "
+                f"WHEN EXCLUDED.status = 'Completed' THEN 'Completed' "
+                f"ELSE EXCLUDED.status END"
+            )
+        else:
+            update_parts.append(f"{c}=EXCLUDED.{c}")
+
     sql = f"""
         INSERT INTO {table} ({", ".join(cols)})
         VALUES ({", ".join(f":{c}" for c in cols)})
         ON CONFLICT (sample_id) DO UPDATE SET
-            {", ".join(f"{c}=EXCLUDED.{c}" for c in cols if c != "sample_id")},
+            {", ".join(update_parts)},
             updated_at = now()
     """
     with engine.begin() as conn:
@@ -610,10 +705,16 @@ def main() -> None:
         record(TAB_RUNLISTS, "error", len(df_runlists), str(exc))
         raise
 
-    def run_assay(tab: str, table: str, mapping: dict[str, str], analyte_cols: Iterable[str] | None = None) -> None:
+    def run_assay(
+        tab: str,
+        table: str,
+        mapping: dict[str, str],
+        analyte_cols: Iterable[str] | None = None,
+        required_src_cols: Sequence[str] | None = None,
+    ) -> None:
         df = fetch_df(sheet, tab)
         try:
-            upsert_generic_assay(engine, df, sample_ids, table, mapping, analyte_cols)
+            upsert_generic_assay(engine, df, sample_ids, table, mapping, analyte_cols, required_src_cols)
             record(tab, "ok", len(df))
         except Exception as exc:  # noqa: BLE001
             record(tab, "error", len(df), str(exc))
@@ -637,6 +738,13 @@ def main() -> None:
             "notes": "Notes",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "CN Analysis Prep Date",
+            "CN Analysis Start Date",
+            "Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -682,6 +790,14 @@ def main() -> None:
             "ym_numerical": "YM Numerical",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "Sample Weight (mg)",
+            "Tempo Prep Date",
+            "Tempo Prep Time",
+            "Lab Analyst - MB",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -712,6 +828,13 @@ def main() -> None:
             "note": "Note",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "HM Analysis Prep Date",
+            "HM Analysis Start Date",
+            "Lab Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -730,6 +853,13 @@ def main() -> None:
             "batch_id": "Batch ID",
             "duplicate_rpd_log": "WA Batch Duplicate RPD Check Log",
         },
+        required_src_cols=[
+            "Sample ID",
+            "WA Analysis Prep Date",
+            "WA Analysis Start Date",
+            "Lab Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -743,6 +873,13 @@ def main() -> None:
             "fail_pictures_notes": "Filth and Foreign Materials FAIL Pictures and Notes",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "Analysis Date",
+            "Analysis Time",
+            "Lab Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -763,6 +900,13 @@ def main() -> None:
             "note": "Note",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "RS Analysis Prep Date",
+            "RS Analysis Start Date",
+            "Lab Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -781,6 +925,13 @@ def main() -> None:
             "note": "Note",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "TP Analysis Prep Date",
+            "TP Analysis Start Date",
+            "Lab Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -797,6 +948,13 @@ def main() -> None:
             "note": "Note",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "PS Analysis Prep Date",
+            "PS Analysis Start Date",
+            "Lab Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -814,6 +972,13 @@ def main() -> None:
             "note": "Note",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "MY Analysis Prep Date",
+            "MY Analysis Start Date",
+            "Lab Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -831,6 +996,13 @@ def main() -> None:
             "notes": "Notes",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "MC Analysis Prep Date",
+            "MC Analysis Start Date",
+            "Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -849,6 +1021,13 @@ def main() -> None:
             "note": "Note",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "PN Analysis Prep Date",
+            "PN Analysis Start Date",
+            "Lab Analyst",
+            "Batch ID",
+        ],
     )
 
     run_assay(
@@ -864,6 +1043,14 @@ def main() -> None:
             "note": "Note",
             "batch_id": "Batch ID",
         },
+        required_src_cols=[
+            "Sample ID",
+            "Run Date",
+            "Run Time",
+            "Lab Analyst",
+            "Test Requested",
+            "Batch ID",
+        ],
     )
 
     LOGGER.info("Completed GLIMS sync. Samples processed: %s", len(sample_ids))

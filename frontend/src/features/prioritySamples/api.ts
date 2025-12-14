@@ -25,6 +25,7 @@ interface MostOverdueResponse {
       label: string
       start_date: string | null
       complete: boolean
+      status?: string | null
     }>
   }>
 }
@@ -65,6 +66,7 @@ function mapSamples(resp: MostOverdueResponse): PrioritySample[] {
       label: t.label,
       startDate: t.start_date,
       complete: t.complete,
+      status: t.status ?? null,
     })),
   }))
 }

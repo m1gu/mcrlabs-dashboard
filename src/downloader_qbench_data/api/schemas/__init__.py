@@ -73,6 +73,7 @@ from .analytics import (
     TestStatePoint,
     TestsStateDistributionResponse,
 )
+from .glims_tat import GlimsTatItem, GlimsTatResponse, GlimsTatStats
 from .entities import (
     OrderDetailResponse,
     OrderSampleItem,
@@ -157,6 +158,10 @@ __all__ = [
     "TestStateBucket",
     "TestStatePoint",
     "TestsStateDistributionResponse",
+    # GLIMS TAT
+    "GlimsTatStats",
+    "GlimsTatItem",
+    "GlimsTatResponse",
     # Entities
     "OrderDetailResponse",
     "OrderSampleItem",

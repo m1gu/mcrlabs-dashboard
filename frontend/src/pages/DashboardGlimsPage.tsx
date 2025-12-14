@@ -9,6 +9,7 @@ import { useAuth } from '../features/auth/AuthContext'
 const NAV_ITEMS = [
   { label: 'Overview', to: '/glims/overview' },
   { label: 'Priority Samples', to: '/glims/priority' },
+  { label: 'TAT Samples', to: '/glims/tat-samples' },
 ]
 
 export function DashboardGlimsPage() {
@@ -16,23 +17,27 @@ export function DashboardGlimsPage() {
   const [syncLabel, setSyncLabel] = useState<string | null>(null)
   const location = useLocation()
 
-  const heroCopy = useMemo(
-    () => {
-      if (location.pathname.includes('/glims/priority')) {
-        return {
-          eyebrow: 'Priority Samples',
-          title: 'Priority Samples',
-          subtitle: 'Track overdue GLIMS samples, test completion, and TAT breaches.',
-        }
-      }
+  const heroCopy = useMemo(() => {
+    if (location.pathname.includes('/glims/priority')) {
       return {
-        eyebrow: 'Overview',
-        title: 'GLIMS Metrics',
-        subtitle: 'Monitor GLIMS data with key metrics, turnaround trends, and highlighted customers.',
+        eyebrow: 'Priority Samples',
+        title: 'Priority Samples',
+        subtitle: 'Track overdue GLIMS samples, test completion, and TAT breaches.',
       }
-    },
-    [location.pathname],
-  )
+    }
+    if (location.pathname.includes('/glims/tat-samples')) {
+      return {
+        eyebrow: 'TAT Samples',
+        title: 'TAT Samples',
+        subtitle: 'Analyze the slowest reported GLIMS samples to spot turnaround bottlenecks.',
+      }
+    }
+    return {
+      eyebrow: 'Overview',
+      title: 'GLIMS Metrics',
+      subtitle: 'Monitor GLIMS data with key metrics, turnaround trends, and highlighted customers.',
+    }
+  }, [location.pathname])
 
   useEffect(() => {
     let cancelled = false

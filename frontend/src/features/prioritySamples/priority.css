@@ -1,0 +1,56 @@
+.priority__status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.priority__status-chip--success {
+  background: rgba(46, 160, 67, 0.2);
+  color: #7ee787;
+}
+
+.priority__status-chip--warning {
+  background: rgba(250, 204, 21, 0.15);
+  color: #facc15;
+}
+
+.priority__status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.priority__status-pill--completed {
+  background: rgba(46, 160, 67, 0.16);
+  color: #7ee787;
+}
+
+.priority__status-pill--batched {
+  background: rgba(251, 191, 36, 0.16);
+  color: #facc15;
+}
+
+.priority__sample-row--single {
+  display: grid;
+  grid-template-columns: 16px 110px 1fr 120px 140px 120px 120px 110px;
+  align-items: center;
+  gap: 12px;
+}
+
+.priority__cell--ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

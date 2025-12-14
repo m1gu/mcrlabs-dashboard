@@ -10,6 +10,7 @@ class PriorityTestItem(BaseModel):
     label: str
     start_date: Optional[date] = None
     complete: bool
+    status: Optional[str] = None
 
 
 class PrioritySampleItem(BaseModel):
@@ -23,6 +24,7 @@ class PrioritySampleItem(BaseModel):
     tests_total: int
     tests_complete: int
     tests: List[PriorityTestItem]
+    status: Optional[str] = None
 
 
 class PrioritySampleResponse(BaseModel):

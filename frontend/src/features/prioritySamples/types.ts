@@ -7,6 +7,7 @@ export interface PriorityTest {
   label: string
   startDate: string | null
   complete: boolean
+  status?: string | null
 }
 
 export interface PrioritySample {
@@ -19,6 +20,7 @@ export interface PrioritySample {
   testsTotal: number
   testsComplete: number
   tests: PriorityTest[]
+  status?: string | null
 }
 
 export interface PrioritySamplesData {
