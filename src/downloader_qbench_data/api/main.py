@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from downloader_qbench_data.config import get_settings
@@ -67,15 +67,36 @@ def create_app() -> FastAPI:
     frontend_dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
     if frontend_dist.exists():
         LOGGER.info("Serving dashboard static files from %s", frontend_dist)
-        app.mount(
-            "/dashboard",
-            StaticFiles(directory=frontend_dist, html=True),
-            name="dashboard",
-        )
+        
+        # 1. Mount assets specifically (better performance, avoids catch-all for these)
+        assets_dir = frontend_dist / "assets"
+        if assets_dir.exists():
+            app.mount(
+                "/dashboard/assets",
+                StaticFiles(directory=assets_dir),
+                name="dashboard_assets",
+            )
 
+        # 2. Redirect root to dashboard
         @app.get("/", include_in_schema=False)
         async def root_redirect() -> RedirectResponse:
             return RedirectResponse(url="/dashboard/", status_code=307)
+
+        # 3. Catch-all for /dashboard/* to serve index.html (SPA Fallback)
+        @app.get("/dashboard/{full_path:path}", include_in_schema=False)
+        async def serve_spa(full_path: str) -> FileResponse:
+            # Check if a physical file exists (e.g. vite.svg, favicon.ico)
+            file_path = frontend_dist / full_path
+            if file_path.exists() and file_path.is_file():
+                return FileResponse(file_path)
+            
+            # Otherwise return index.html for client-side routing
+            return FileResponse(frontend_dist / "index.html")
+
+        # Handle exact /dashboard request too
+        @app.get("/dashboard", include_in_schema=False)
+        async def serve_spa_root() -> FileResponse:
+             return FileResponse(frontend_dist / "index.html")
     else:
         LOGGER.warning("Frontend build not found at %s; dashboard route disabled", frontend_dist)
 
