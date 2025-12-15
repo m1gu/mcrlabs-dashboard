@@ -38,6 +38,7 @@ ASSAY_START_MAP = {
     "PN": ("glims_pn_results", "start_date"),
     "FFM": ("glims_ffm_results", "analysis_date"),
     "LW": ("glims_lw_results", "run_date"),
+    "HO": ("glims_ho_results", "start_date"),
 }
 
 
@@ -88,7 +89,7 @@ def get_most_overdue_samples(
         tests_agg AS (
             SELECT sample_id,
                    COUNT(*) AS tests_total,
-                   COUNT(*) FILTER (WHERE analytes IS NOT NULL) AS tests_complete
+                   COUNT(*) FILTER (WHERE status = 'Completed') AS tests_complete
             FROM tests_union
             GROUP BY sample_id
         ),
@@ -132,7 +133,7 @@ def get_most_overdue_samples(
 
     # Fetch tests for these samples
     tests_sql = f"""
-        SELECT t.sample_id, t.label, t.start_date, (t.analytes IS NOT NULL) AS complete, t.status
+        SELECT t.sample_id, t.label, t.start_date, (t.status = 'Completed') AS complete, t.status
         FROM ({tests_union_sql}) t
         WHERE t.sample_id = ANY(:sample_ids)
     """
@@ -185,7 +186,7 @@ def get_overdue_heatmap(
         tests_agg AS (
             SELECT sample_id,
                    COUNT(*) AS tests_total,
-                   COUNT(*) FILTER (WHERE analytes IS NOT NULL) AS tests_complete
+                   COUNT(*) FILTER (WHERE status = 'Completed') AS tests_complete
             FROM tests_union
             GROUP BY sample_id
         )

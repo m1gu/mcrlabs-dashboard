@@ -44,6 +44,7 @@ ASSAY_TABLES = {
     "PN": ("glims_pn_results", "prep_date", "start_date"),
     "FFM": ("glims_ffm_results", "analysis_date", "analysis_date"),
     "LW": ("glims_lw_results", "run_date", "run_date"),
+    "HO": ("glims_ho_results", "prep_date", "start_date"),
 }
 
 

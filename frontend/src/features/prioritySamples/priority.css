@@ -54,3 +54,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Status Colors */
+.priority__status-pill--waiting { background-color: #f3f4f6; color: #1f2937; }
+.priority__status-pill--received { background-color: #dbeafe; color: #1e40af; }
+.priority__status-pill--running { background-color: #fef9c3; color: #854d0e; }
+.priority__status-pill--generating { background-color: #fb923c; color: #1f2937; }
+.priority__status-pill--metrc { background-color: #ffedd5; color: #9a3412; }
+.priority__status-pill--retest { background-color: #fef08a; color: #000000; }
+.priority__status-pill--reported { background-color: #059669; color: #ffffff; }
+.priority__status-pill--destroyed { background-color: #451a03; color: #e5e5e5; }
+.priority__status-pill--cancelled { background-color: #dc2626; color: #ffffff; }
+.priority__status-pill--not-reportable { background-color: #7f1d1d; color: #ffffff; }
+.priority__status-pill--needs-check { background-color: #7c3aed; color: #ffffff; }
+.priority__status-pill--check-done { background-color: #dcfce7; color: #166534; }

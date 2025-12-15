@@ -44,6 +44,7 @@ TAB_MY = "MY"
 TAB_MC = "MC"
 TAB_PN = "PN"
 TAB_LW = "LW"
+TAB_HO = "HO"
 
 DATE_COLS_OVERVIEW = ["DateReceived", "DateCollected", "ReportDate"]
 
@@ -59,10 +60,8 @@ NUMERIC_FIELDS = {
     "number_units_received",
     "lot_size",
     # Heavy metals numeric fields
-    "as_val",
-    "cd_val",
-    "hg_val",
-    "pb_val",
+    # Heavy metals numeric fields
+    # as_val, cd_val, hg_val, pb_val are now TEXT to support ND/BQL
     "as_lod",
     "cd_lod",
     "hg_lod",
@@ -74,6 +73,15 @@ NUMERIC_FIELDS = {
     # Other numeric measurements
     "wa",
     "moisture_content_percent",
+    # Homogeneity
+    "total_thc_1",
+    "total_cbd_1",
+    "total_thc_2",
+    "total_cbd_2",
+    "total_thc_3",
+    "total_cbd_3",
+    "total_thc_rsd",
+    "total_cbd_rsd",
 }
 
 DATE_ONLY_FIELDS = {
@@ -177,6 +185,11 @@ def to_ts(value: Any) -> datetime | None:
         return None
     if isinstance(value, str) and value.strip().lower() in {"n/a", "na", "nan"}:
         return None
+    
+    # Strip parentheses and strict whitespace
+    if isinstance(value, str):
+        value = value.strip().strip("()")
+
     try:
         parsed = pd.to_datetime(value, errors="coerce", utc=True)
     except Exception:
@@ -252,8 +265,13 @@ def normalize_disp_name(name: str) -> str:
     return val
 
 
-def normalize_sample_id(raw: str) -> str:
-    """Strip only special HO / -N suffixes to match glims_samples.sample_id."""
+def normalize_sample_id(raw: str, strip_numeric: bool = False) -> str:
+    """Strip only special HO / -N suffixes to match glims_samples.sample_id.
+    
+    Args:
+        raw: The raw sample ID string.
+        strip_numeric: If True, also strips numeric suffixes like -1, -2 (used for HO aliguots).
+    """
 
     if not raw:
         return ""
@@ -261,6 +279,15 @@ def normalize_sample_id(raw: str) -> str:
     # Remove HO suffix variants (e.g. -HO1, -HO2-1) and -N
     sid = re.sub(r"-(HO\d+(?:-\d+)?)$", "", sid, flags=re.IGNORECASE)
     sid = re.sub(r"-N$", "", sid, flags=re.IGNORECASE)
+
+    # Strip numeric suffix (e.g. -1, -2) for reruns/aliquots, IF we have at least 2 dashes
+    # e.g. S25-00955-1 -> S25-00955 (safe)
+    #      S25-00955   -> S25-00955 (preserved)
+    # Only apply if explicitly requested (e.g. for HO)
+    if strip_numeric and re.search(r"(-\d+)$", sid):
+        if sid.count('-') >= 2:
+            sid = re.sub(r"-\d+$", "", sid)
+
     return sid or raw.strip()
 
 
@@ -554,15 +581,23 @@ def upsert_generic_assay(
     mapping: dict[str, str],
     analyte_cols: Iterable[str] | None = None,
     required_src_cols: Sequence[str] | None = None,
+
+    result_cols: Sequence[str] | None = None,
+    strip_numeric_suffix: bool = False,
 ) -> None:
     if df.empty or "Sample ID" not in df.columns:
         return
+    
     rows = []
     known_src = list(mapping.values())
     candidate_ids: set[str] = set()
-    for _, row in df.iterrows():
+
+    for i, row in df.iterrows():
         raw_sid = str(row.get("Sample ID") or "").strip()
-        clean_sid = normalize_sample_id(raw_sid)
+        
+        raw_sid = str(row.get("Sample ID") or "").strip()
+        
+        clean_sid = normalize_sample_id(raw_sid, strip_numeric=strip_numeric_suffix)
         if not clean_sid:
             continue
         if required_src_cols and not _has_required_fields(row, required_src_cols):
@@ -586,10 +621,32 @@ def upsert_generic_assay(
                 payload[dst] = to_ts(val)
             else:
                 payload[dst] = val
+        
         if analyte_cols is not None:
             analytes = {k: v for k, v in analytes.items() if k in analyte_cols}
+        
+        # Check if analytes has REAL data (not just empty strings or None)
+        has_analytes = False
+        if analytes:
+             for v in analytes.values():
+                 if v and str(v).strip().lower() not in ("nan", "none", "", "null"):
+                     has_analytes = True
+                     break
+        
         payload["analytes"] = json.dumps(analytes) if analytes else None
-        payload["status"] = "Completed" if payload.get("analytes") else "Batched"
+        
+        # Check explicit result columns for completion
+        has_results = False
+        if result_cols:
+            for col in result_cols:
+                val = payload.get(col)
+                if val is not None and str(val).strip().lower() not in ("nan", "none", "", "null"):
+                    has_results = True
+                    break
+        
+        is_completed = has_analytes or has_results
+        payload["status"] = "Completed" if is_completed else "Batched"
+        
         rows.append(payload)
         candidate_ids.add(clean_sid)
     if not rows:
@@ -711,10 +768,12 @@ def main() -> None:
         mapping: dict[str, str],
         analyte_cols: Iterable[str] | None = None,
         required_src_cols: Sequence[str] | None = None,
+        result_cols: Sequence[str] | None = None,
+        strip_numeric_suffix: bool = False,
     ) -> None:
         df = fetch_df(sheet, tab)
         try:
-            upsert_generic_assay(engine, df, sample_ids, table, mapping, analyte_cols, required_src_cols)
+            upsert_generic_assay(engine, df, sample_ids, table, mapping, analyte_cols, required_src_cols, result_cols, strip_numeric_suffix=strip_numeric_suffix)
             record(tab, "ok", len(df))
         except Exception as exc:  # noqa: BLE001
             record(tab, "error", len(df), str(exc))
@@ -798,6 +857,7 @@ def main() -> None:
             "Lab Analyst - MB",
             "Batch ID",
         ],
+        result_cols=["ac", "ym", "eb", "cc", "sal", "stec"],
     )
 
     run_assay(
@@ -835,6 +895,7 @@ def main() -> None:
             "Lab Analyst",
             "Batch ID",
         ],
+        result_cols=["as_val", "cd_val", "hg_val", "pb_val"],
     )
 
     run_assay(
@@ -860,6 +921,7 @@ def main() -> None:
             "Lab Analyst",
             "Batch ID",
         ],
+        result_cols=["wa"],
     )
 
     run_assay(
@@ -880,6 +942,7 @@ def main() -> None:
             "Lab Analyst",
             "Batch ID",
         ],
+        result_cols=["pass_fail"],
     )
 
     run_assay(
@@ -977,7 +1040,6 @@ def main() -> None:
             "MY Analysis Prep Date",
             "MY Analysis Start Date",
             "Lab Analyst",
-            "Batch ID",
         ],
     )
 
@@ -1003,6 +1065,7 @@ def main() -> None:
             "Analyst",
             "Batch ID",
         ],
+        result_cols=["moisture_content_percent"],
     )
 
     run_assay(
@@ -1051,6 +1114,42 @@ def main() -> None:
             "Test Requested",
             "Batch ID",
         ],
+        result_cols=["result"],
+    )
+
+    run_assay(
+        TAB_HO,
+        "glims_ho_results",
+        mapping={
+            "prep_date": "HO Analysis Prep Date",
+            "start_date": "HO Analysis Start Date",
+            "lab_analyst": "Lab Analyst",
+            "instrument": "Instrument",
+            "total_thc_1": "Total THC 1 (mg/g)",
+            "total_cbd_1": "Total CBD 1 (mg/g)",
+            "total_thc_2": "Total THC 2 (mg/g)",
+            "total_cbd_2": "Total CBD 2 (mg/g)",
+            "total_thc_3": "Total THC 3 (mg/g)",
+            "total_cbd_3": "Total CBD 3 (mg/g)",
+            "total_thc_rsd": "Total THC (% RSD)",
+            "total_cbd_rsd": "Total CBD (% RSD)",
+            "data_analyst": "Data Analyst",
+            "notes": "Notes",
+            "batch_id": "Batch ID",
+        },
+        required_src_cols=[
+            "Sample ID",
+            "HO Analysis Prep Date",
+            "HO Analysis Start Date",
+            "Lab Analyst",
+            "Batch ID",
+        ],
+        result_cols=[
+            "total_thc_1", "total_cbd_1",
+            "total_thc_2", "total_cbd_2",
+            "total_thc_3", "total_cbd_3",
+        ],
+        strip_numeric_suffix=True,
     )
 
     LOGGER.info("Completed GLIMS sync. Samples processed: %s", len(sample_ids))

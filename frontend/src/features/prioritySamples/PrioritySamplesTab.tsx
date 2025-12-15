@@ -101,9 +101,8 @@ export function PrioritySamplesTab() {
                 return (
                   <div
                     key={sample.sampleId}
-                    className={`priority__accordion-item priority__accordion-item--sample ${
-                      expanded ? 'priority__accordion-item--open' : ''
-                    } ${tatBreach ? 'priority__accordion-item--breach' : ''}`}
+                    className={`priority__accordion-item priority__accordion-item--sample ${expanded ? 'priority__accordion-item--open' : ''
+                      } ${tatBreach ? 'priority__accordion-item--breach' : ''}`}
                   >
                     <button type="button" className="priority__accordion-trigger" onClick={toggle}>
                       <div className="priority__sample-row priority__sample-row--single">
@@ -128,7 +127,6 @@ export function PrioritySamplesTab() {
                                 <th>Label</th>
                                 <th>Start date</th>
                                 <th>Status</th>
-                                <th>Result</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -138,20 +136,11 @@ export function PrioritySamplesTab() {
                                     <td>{t.label}</td>
                                     <td>{t.startDate ? formatDateTimeLabel(new Date(t.startDate)) : '--'}</td>
                                     <td><StatusPill value={t.status} compact /></td>
-                                    <td>
-                                      <span
-                                        className={`priority__status-chip ${
-                                          t.complete ? 'priority__status-chip--success' : 'priority__status-chip--default'
-                                        }`}
-                                      >
-                                        {t.complete ? 'Completed' : 'Not Completed'}
-                                      </span>
-                                    </td>
                                   </tr>
                                 ))
                               ) : (
                                 <tr>
-                                  <td colSpan={4} className="priority__empty">
+                                  <td colSpan={3} className="priority__empty">
                                     No tests
                                   </td>
                                 </tr>
@@ -192,11 +181,10 @@ export function PrioritySamplesTab() {
                       <td className="priority__metrc-id">{row.metrcId}</td>
                       <td>
                         <span
-                          className={`priority__status-chip ${
-                            row.metrcStatus && row.metrcStatus.toLowerCase().includes('progress')
+                          className={`priority__status-chip ${row.metrcStatus && row.metrcStatus.toLowerCase().includes('progress')
                               ? 'priority__status-chip--warning'
                               : 'priority__status-chip--default'
-                          }`}
+                            }`}
                         >
                           {row.metrcStatus}
                         </span>
