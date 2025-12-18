@@ -49,6 +49,7 @@ interface OverdueOrdersResponse {
     metrc_id: string
     metrc_status: string | null
     metrc_date: string | null
+    open_time_label: string | null
     customer_name: string | null
   }>
 }
@@ -99,7 +100,8 @@ function mapMetrcSamples(resp: OverdueOrdersResponse): MetrcSample[] {
     metrcStatus: item.metrc_status || '--',
     metrcDate: item.metrc_date,
     customer: item.customer_name || '--',
-    openTime: formatElapsedDaysHours(item.metrc_date ? new Date(item.metrc_date) : null),
+    // Use the backend provided label if available, fallback to calc
+    openTime: item.open_time_label || formatElapsedDaysHours(item.metrc_date ? new Date(item.metrc_date) : null),
   }))
 }
 

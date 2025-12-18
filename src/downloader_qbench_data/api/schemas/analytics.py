@@ -358,6 +358,7 @@ class MetrcSampleStatusItem(BaseModel):
     metrc_id: str
     metrc_status: Optional[str] = None
     metrc_date: Optional[datetime] = None
+    open_time_label: Optional[str] = Field(None, description="Formatted open time e.g. '9d'")
     customer_name: Optional[str] = None
 
 

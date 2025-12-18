@@ -945,62 +945,57 @@ def get_overdue_orders(
         for row in session.execute(ready_samples_stmt)
     ]
 
-    status_ranked = (
-        select(
-            MetrcSampleStatus.metrc_id.label("metrc_id"),
-            MetrcSampleStatus.metrc_status,
-            MetrcSampleStatus.metrc_date,
-            func.row_number()
-            .over(
-                partition_by=MetrcSampleStatus.metrc_id,
-                order_by=MetrcSampleStatus.metrc_date.desc(),
-            )
-            .label("rank"),
-        )
-        .where(
-            MetrcSampleStatus.metrc_date.isnot(None),
-            MetrcSampleStatus.metrc_date >= status_window_start,
-            MetrcSampleStatus.metrc_date <= reference_dt,
-        )
-        .subquery()
-    )
-
+    # Updated Logic: Direct Join with simple filtering for METRC samples
+    # 1. Join glims_samples and metrc_sample_statuses on metrc_id
+    # 2. Filter by status_window_start (last 30 days)
     metrc_stmt = (
         select(
             Sample.id.label("sample_id"),
             Sample.custom_formatted_id.label("sample_custom_id"),
             Sample.date_created,
             Sample.metrc_id,
-            status_ranked.c.metrc_status,
-            status_ranked.c.metrc_date,
+            MetrcSampleStatus.metrc_status,
+            MetrcSampleStatus.metrc_date,
             Customer.name.label("customer_name"),
         )
         .select_from(Sample)
         .join(Order, Order.id == Sample.order_id)
         .join(Customer, Customer.id == Order.customer_account_id, isouter=True)
-        .join(
-            status_ranked,
-            (status_ranked.c.metrc_id == Sample.metrc_id) & (status_ranked.c.rank == 1),
-        )
+        .join(MetrcSampleStatus, MetrcSampleStatus.metrc_id == Sample.metrc_id)
         .where(
             Sample.metrc_id.isnot(None),
+            MetrcSampleStatus.metrc_date >= status_window_start,
+            MetrcSampleStatus.metrc_date <= reference_dt,
         )
         .where(*_sample_visibility_conditions())
-        .order_by(status_ranked.c.metrc_date.desc())
+        .order_by(MetrcSampleStatus.metrc_date.desc())
     )
 
-    metrc_samples = [
-        MetrcSampleStatusItem(
-            sample_id=row.sample_id,
-            sample_custom_id=row.sample_custom_id,
-            date_created=row.date_created,
-            metrc_id=row.metrc_id,
-            metrc_status=row.metrc_status,
-            metrc_date=row.metrc_date,
-            customer_name=row.customer_name,
+    metrc_samples = []
+    # Helper to format days only
+    def _format_days_only(dt: datetime) -> str:
+        if not dt:
+            return "--"
+        now_dt = datetime.utcnow() # Use UTC consistent with DB
+        delta = now_dt - dt
+        days = delta.days
+        # If open time is negative (future date), clamp to 0
+        return f"{max(0, days)}d"
+
+    for row in session.execute(metrc_stmt):
+        open_time = _format_days_only(row.metrc_date)
+        metrc_samples.append(
+            MetrcSampleStatusItem(
+                sample_id=row.sample_id,
+                sample_custom_id=row.sample_custom_id,
+                date_created=row.date_created,
+                metrc_id=row.metrc_id,
+                metrc_status=row.metrc_status,
+                metrc_date=row.metrc_date,
+                open_time_label=open_time,
+                customer_name=row.customer_name,
+            )
         )
-        for row in session.execute(metrc_stmt)
-    ]
 
     return OverdueOrdersResponse(
         interval=interval_value,
