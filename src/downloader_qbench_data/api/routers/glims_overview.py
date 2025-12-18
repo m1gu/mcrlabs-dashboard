@@ -82,19 +82,34 @@ def get_summary(
     if dispensary_id:
         filters.append("s.dispensary_id = :dispensary_id")
         params["dispensary_id"] = dispensary_id
-    where_clause = " AND ".join(filters)
-
-    samples_sql = f"""
+    # Query 1: Intake Metrics (based on date_received)
+    intake_where = " AND ".join(filters) # Already defined as date_received filter
+    
+    intake_sql = f"""
         SELECT
             COUNT(*) AS samples,
             COUNT(DISTINCT s.dispensary_id) FILTER (WHERE s.dispensary_id IS NOT NULL) AS customers,
-            COUNT(*) FILTER (WHERE s.report_date IS NOT NULL) AS reports,
-            AVG(EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0) FILTER (WHERE s.report_date IS NOT NULL AND s.date_received IS NOT NULL) AS avg_tat_hours,
             MAX(GREATEST(s.date_received, s.report_date)) AS last_updated_at
         FROM glims_samples s
-        WHERE {where_clause}
+        WHERE {intake_where}
     """
-    samples_row = session.execute(text(samples_sql), params).one()
+    intake_row = session.execute(text(intake_sql), params).one()
+
+    # Query 2: Output Metrics (based on report_date)
+    # Align 'Reports' KPI with the Activity Chart (Sum of daily reported)
+    output_filters = ["s.report_date BETWEEN :start AND :end"]
+    if dispensary_id:
+        output_filters.append("s.dispensary_id = :dispensary_id")
+    output_where = " AND ".join(output_filters)
+
+    output_sql = f"""
+        SELECT
+            COUNT(*) AS reports,
+            AVG(EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0) AS avg_tat_hours
+        FROM glims_samples s
+        WHERE {output_where}
+    """
+    output_row = session.execute(text(output_sql), params).one()
 
     sync_sql = """
         SELECT finished_at
@@ -117,13 +132,13 @@ def get_summary(
         tests_total += session.execute(text(test_sql), params).scalar_one()
 
     return OverviewSummary(
-        samples=samples_row.samples or 0,
+        samples=intake_row.samples or 0,
         tests=tests_total,
-        customers=samples_row.customers or 0,
-        reports=samples_row.reports or 0,
-        avg_tat_hours=float(samples_row.avg_tat_hours) if samples_row.avg_tat_hours is not None else None,
+        customers=intake_row.customers or 0,
+        reports=output_row.reports or 0,
+        avg_tat_hours=float(output_row.avg_tat_hours) if output_row.avg_tat_hours is not None else None,
         last_sync_at=last_sync_at,
-        last_updated_at=samples_row.last_updated_at,
+        last_updated_at=intake_row.last_updated_at,
     )
 
 
