@@ -151,13 +151,15 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
 .priority__accordion-header span:first-child {
   visibility: hidden;
 }
+
 .priority__accordion-header--samples {
-  grid-template-columns: 24px 160px 1fr 140px 140px 140px 140px;
+  grid-template-columns: 16px 110px 1fr 120px 140px 120px 120px 110px;
 }
 
 .priority__accordion-item {
@@ -269,13 +271,16 @@
   align-items: center;
   gap: 12px;
 }
+
 .priority__sample-row .priority__pill {
   justify-self: end;
   white-space: nowrap;
 }
+
 .priority__tat-chip {
   justify-self: start;
 }
+
 .priority__accordion-item--breach {
   border-color: rgba(249, 115, 147, 0.35);
   box-shadow: 0 0 0 1px rgba(249, 115, 147, 0.12);
@@ -316,7 +321,7 @@
 }
 
 /* evita recortes raros */
-.priority__grid .overview__card { 
+.priority__grid .overview__card {
   min-width: 0;
   justify-self: stretch;
   margin-bottom: 40px;
@@ -481,7 +486,8 @@
 
 /* restaura la compensación del scrollbar dentro de la tabla */
 .priority__table {
-  --priority-scrollbar-width: 14px; /* por si no usas :root */
+  --priority-scrollbar-width: 14px;
+  /* por si no usas :root */
   max-height: 320px;
   overflow-y: auto;
   scrollbar-gutter: stable;
@@ -496,11 +502,13 @@
 .priority__table table {
   width: 100%;
 }
+
 .priority__table--metrc table th,
 .priority__table--metrc table td {
   padding: 12px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
+
 .priority__table--metrc table tr:last-child td {
   border-bottom: none;
 }
@@ -539,4 +547,3 @@
   flex-wrap: wrap;
   gap: 4px;
 }
-

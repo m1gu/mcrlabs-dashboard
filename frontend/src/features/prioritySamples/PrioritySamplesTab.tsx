@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { formatDateTimeLabel, formatHoursToDuration } from '../../utils/format'
+import { formatDateInput, formatDateTimeLabel, formatHoursToDays, formatHoursToDuration } from '../../utils/format'
 import { usePrioritySamples } from './usePrioritySamples'
 import type { PrioritySamplesFilters } from './types'
 import '../priority/priority.css'
@@ -91,9 +91,9 @@ export function PrioritySamplesTab() {
                 <span>Tests</span>
               </div>
               {data.samples.map((sample) => {
-                const openLabel = sample.openHours != null ? formatHoursToDuration(sample.openHours) : '--'
+                const openLabel = sample.openHours != null ? formatHoursToDays(sample.openHours) : '--'
                 const completion = sample.testsTotal > 0 ? `${sample.testsComplete}/${sample.testsTotal}` : '0/0'
-                const receivedLabel = sample.dateReceived ? formatDateTimeLabel(new Date(sample.dateReceived)) : '--'
+                const receivedLabel = sample.dateReceived ? formatDateInput(new Date(sample.dateReceived)) : '--'
                 const expanded = expandedSampleId === sample.sampleId
                 const breachThreshold = filters.tatHours ?? DEFAULT_TAT_HOURS
                 const tatBreach = sample.openHours != null && sample.openHours >= breachThreshold
@@ -182,8 +182,8 @@ export function PrioritySamplesTab() {
                       <td>
                         <span
                           className={`priority__status-chip ${row.metrcStatus && row.metrcStatus.toLowerCase().includes('progress')
-                              ? 'priority__status-chip--warning'
-                              : 'priority__status-chip--default'
+                            ? 'priority__status-chip--warning'
+                            : 'priority__status-chip--default'
                             }`}
                         >
                           {row.metrcStatus}
