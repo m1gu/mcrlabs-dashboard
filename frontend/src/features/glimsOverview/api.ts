@@ -69,12 +69,22 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
     dailyActivity:
       activity.points?.map((point) => {
         const date = parseISO(point.date)
+        const breakdown = point.samples_breakdown || {}
+        const flattenedBreakdown: Record<string, number> = {}
+        Object.entries(breakdown).forEach(([key, count]) => {
+          // Normalize key to be safe for recharts (remove spaces/special chars if needed)
+          // For now we keep it simple or just use the key directly if it's clean enough
+          // We'll prefix to avoid collisions
+          flattenedBreakdown[`samples_${key}`] = count
+        })
+
         return {
           date,
           label: formatDateLabel(date),
           samples: point.samples,
           tests: point.tests,
           testsReported: point.samples_reported,
+          ...flattenedBreakdown,
         }
       }) ?? [],
     newCustomers:

@@ -17,6 +17,7 @@ export interface GlimsActivityResponse {
     samples: number
     tests: number
     samples_reported: number
+    samples_breakdown?: Record<string, number>
   }>
 }
 

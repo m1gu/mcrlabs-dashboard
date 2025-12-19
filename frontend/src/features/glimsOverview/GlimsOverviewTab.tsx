@@ -108,7 +108,7 @@ export function GlimsOverviewTab() {
       <section className="overview__kpis">
         <KpiCard label="Samples" value={formatNumber(data?.summary.samples ?? null)} />
         <KpiCard label="Tests" value={formatNumber(data?.summary.tests ?? null)} />
-        <KpiCard label="Customers" value={formatNumber(data?.summary.customers ?? null)} />
+        <KpiCard label="New customers" value={formatNumber(data?.summary.customers ?? null)} />
         <KpiCard label="Reports (samples reported)" value={formatNumber(data?.summary.reports ?? null)} />
         <KpiCard label="Avg TAT" value={formatHoursToDuration(data?.summary.avgTatHours ?? null)} accent="highlight" />
       </section>
@@ -131,7 +131,41 @@ export function GlimsOverviewTab() {
                     labelStyle={{ color: '#f4f7ff' }}
                   />
                   <Legend />
-                  <Bar dataKey="samples" name="Samples" fill="#4C6EF5" radius={[6, 6, 0, 0]} />
+                  {/* Generate stacked bars for samples breakdown */}
+                  {(() => {
+                    const sampleKeys = new Set<string>()
+                    data.dailyActivity.forEach((day: any) => {
+                      Object.keys(day).forEach((key) => {
+                        if (key.startsWith('samples_')) {
+                          sampleKeys.add(key)
+                        }
+                      })
+                    })
+                    const sortedKeys = Array.from(sampleKeys).sort()
+
+                    const colors = ['#4C6EF5', '#339AF0', '#15AABF', '#228BE6', '#4dabf7']
+
+                    if (sortedKeys.length === 0) {
+                      return <Bar dataKey="samples" name="Samples" fill="#4C6EF5" radius={[6, 6, 0, 0]} />
+                    }
+
+                    return sortedKeys.map((key, index) => {
+                      const label = key.replace('samples_', '')
+                      // Only top bar gets radius
+                      const isLast = index === sortedKeys.length - 1
+                      const radius: [number, number, number, number] = isLast ? [6, 6, 0, 0] : [0, 0, 0, 0]
+                      return (
+                        <Bar
+                          key={key}
+                          dataKey={key}
+                          name={`Samples (${label})`}
+                          fill={colors[index % colors.length]}
+                          stackId="samples"
+                          radius={radius}
+                        />
+                      )
+                    })
+                  })()}
                   <Bar dataKey="tests" name="Tests" fill="#7EE787" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="testsReported" name="Samples reported" fill="#F472B6" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -159,7 +193,7 @@ export function GlimsOverviewTab() {
                     <tr key={customer.id}>
                       <td>{customer.id}</td>
                       <td>{customer.name}</td>
-                      <td>{formatDateTimeLabel(customer.createdAt)}</td>
+                      <td>{formatDateInput(customer.createdAt)}</td>
                     </tr>
                   ))
                 ) : (

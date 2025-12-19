@@ -29,6 +29,7 @@ class ActivityPoint(BaseModel):
     samples: int
     tests: int
     samples_reported: int
+    samples_breakdown: dict[str, int] = {}
 
 
 class ActivityResponse(BaseModel):

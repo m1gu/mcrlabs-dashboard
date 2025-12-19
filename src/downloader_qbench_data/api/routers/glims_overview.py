@@ -156,12 +156,25 @@ def get_activity(
         params["dispensary_id"] = dispensary_id
 
     samples_sql = f"""
-        SELECT date_received AS d, COUNT(*) AS c
+        SELECT date_received AS d, adult_use_medical, COUNT(*) AS c
         FROM glims_samples s
         WHERE date_received BETWEEN :start AND :end {disp_filter}
-        GROUP BY date_received
+        GROUP BY date_received, adult_use_medical
     """
-    samples_map = {row.d: row.c for row in session.execute(text(samples_sql), params)}
+    
+    samples_map: dict[date, int] = {}
+    breakdown_map: dict[date, dict[str, int]] = {}
+
+    for row in session.execute(text(samples_sql), params):
+        d_val = row.d
+        category = row.adult_use_medical or "Unknown"
+        count = row.c
+        
+        samples_map[d_val] = samples_map.get(d_val, 0) + count
+        
+        if d_val not in breakdown_map:
+            breakdown_map[d_val] = {}
+        breakdown_map[d_val][category] = breakdown_map[d_val].get(category, 0) + count
 
     reported_sql = f"""
         SELECT report_date AS d, COUNT(*) AS c
@@ -192,6 +205,7 @@ def get_activity(
                 samples=samples_map.get(current, 0),
                 tests=tests_map.get(current, 0),
                 samples_reported=reported_map.get(current, 0),
+                samples_breakdown=breakdown_map.get(current, {}),
             )
         )
         current += timedelta(days=1)

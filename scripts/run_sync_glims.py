@@ -456,7 +456,7 @@ def upsert_overview(engine: Engine, df: pd.DataFrame, lookback_days: int | None,
             "sample_double_checked": row.get("Sample Double Checked (Initials)"),
             "cc_sample_id": row.get("CC Sample ID"),
             "status": row.get("Status"),
-            "adult_use_medical": row.get("Adult Use / Medical"),
+            "adult_use_medical": row.get("Adult Use / Medical") or row.get("Adult Use/Medical"),
             "gross_weight_g": to_num(row.get("Gross Weight (g)")),
         }
         client_val = str(row.get("Client") or "").strip().lower()
