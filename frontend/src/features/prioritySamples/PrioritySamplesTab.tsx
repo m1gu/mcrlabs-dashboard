@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { formatDateInput, formatDateTimeLabel, formatHoursToDays } from '../../utils/format'
+import { formatDateInput, formatHoursToDays } from '../../utils/format'
 import { usePrioritySamples } from './usePrioritySamples'
 import type { PrioritySamplesFilters } from './types'
 import '../priority/priority.css'

@@ -143,7 +143,7 @@ export function GlimsOverviewTab() {
                     })
                     const sortedKeys = Array.from(sampleKeys).sort()
 
-                    const colors = ['#4C6EF5', '#339AF0', '#15AABF', '#228BE6', '#4dabf7']
+                    const colors = ['#FFD43B', '#22B8CF', '#FF922B']
 
                     if (sortedKeys.length === 0) {
                       return <Bar dataKey="samples" name="Samples" fill="#4C6EF5" radius={[6, 6, 0, 0]} />
