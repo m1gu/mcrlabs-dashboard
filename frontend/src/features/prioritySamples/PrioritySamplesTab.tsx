@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { formatDateInput, formatDateTimeLabel, formatHoursToDays, formatHoursToDuration } from '../../utils/format'
+import { formatDateInput, formatDateTimeLabel, formatHoursToDays } from '../../utils/format'
 import { usePrioritySamples } from './usePrioritySamples'
 import type { PrioritySamplesFilters } from './types'
 import '../priority/priority.css'
@@ -134,7 +134,7 @@ export function PrioritySamplesTab() {
                                 sample.tests.map((t) => (
                                   <tr key={`${sample.sampleId}-${t.label}-${t.startDate || 'nodate'}`}>
                                     <td>{t.label}</td>
-                                    <td>{t.startDate ? formatDateTimeLabel(new Date(t.startDate)) : '--'}</td>
+                                    <td>{t.startDate ? formatDateInput(new Date(t.startDate)) : '--'}</td>
                                     <td><StatusPill value={t.status} compact /></td>
                                   </tr>
                                 ))
