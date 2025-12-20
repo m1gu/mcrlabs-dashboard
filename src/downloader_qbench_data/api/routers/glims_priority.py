@@ -104,7 +104,7 @@ def get_most_overdue_samples(
                 s.report_date,
                 COALESCE(ta.tests_total, 0) AS tests_total,
                 COALESCE(ta.tests_complete, 0) AS tests_complete,
-                EXTRACT(EPOCH FROM (:now - s.date_received::timestamp))/3600.0 AS open_hours
+                EXTRACT(EPOCH FROM (timezone('America/New_York', now()) - s.date_received::timestamp))/3600.0 AS open_hours
             FROM glims_samples s
             LEFT JOIN tests_agg ta ON ta.sample_id = s.sample_id
             LEFT JOIN glims_dispensaries d ON d.id = s.dispensary_id
@@ -201,7 +201,7 @@ def get_overdue_heatmap(
         WHERE s.date_received IS NOT NULL
           AND s.sample_id !~ :exclude_pattern
           AND (s.report_date IS NULL OR COALESCE(ta.tests_total,0)=0 OR COALESCE(ta.tests_complete,0) < COALESCE(ta.tests_total,0))
-          AND EXTRACT(EPOCH FROM (:now - s.date_received::timestamp))/3600.0 >= (:min_days * 24)
+          AND EXTRACT(EPOCH FROM (timezone('America/New_York', now()) - s.date_received::timestamp))/3600.0 >= (:min_days * 24)
         GROUP BY s.dispensary_id, d.name, period_start
         ORDER BY period_start, dispensary_name
     """

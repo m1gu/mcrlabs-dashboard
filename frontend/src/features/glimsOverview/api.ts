@@ -1,4 +1,3 @@
-import { parseISO } from 'date-fns'
 import { apiFetchV2 } from '../../lib/api'
 import { formatDateLabel, parseApiDate } from '../../utils/format'
 import type { OverviewData } from '../overview/types'
@@ -39,7 +38,7 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
 
   const tatDailySeries =
     tatDaily.points?.map((point) => {
-      const date = parseISO(point.date)
+      const date = parseApiDate(point.date)!
       return {
         date,
         label: formatDateLabel(date),
@@ -57,7 +56,7 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
       customers: summary.customers,
       reports: summary.reports,
       avgTatHours: summary.avg_tat_hours,
-      lastUpdatedAt: summary.last_updated_at ? parseISO(summary.last_updated_at) : null,
+      lastUpdatedAt: summary.last_updated_at ? parseApiDate(summary.last_updated_at) : null,
       rangeStart: parseApiDate(filters.dateFrom),
       rangeEnd: parseApiDate(filters.dateTo),
     },
@@ -68,7 +67,7 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
     },
     dailyActivity:
       activity.points?.map((point) => {
-        const date = parseISO(point.date)
+        const date = parseApiDate(point.date)!
         const breakdown = point.samples_breakdown || {}
         const flattenedBreakdown: Record<string, number> = {}
         Object.entries(breakdown).forEach(([key, count]) => {
@@ -91,7 +90,7 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
       newCustomers.customers?.map((customer) => ({
         id: customer.id,
         name: customer.name,
-        createdAt: parseISO(customer.created_at),
+        createdAt: parseApiDate(customer.created_at)!,
       })) ?? [],
     topCustomers:
       topCustomers.customers

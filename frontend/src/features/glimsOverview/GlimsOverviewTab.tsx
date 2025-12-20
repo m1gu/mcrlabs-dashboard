@@ -205,7 +205,7 @@ export function GlimsOverviewTab() {
         </div>
 
         <div className="overview__card">
-          <CardHeader title="Top 10 customers with more tests" subtitle="Sorted by total tests in the period" />
+          <CardHeader title="Top 10 customers with the most tests" subtitle="Sorted by total tests in the period" />
           <div className="overview__table-wrapper">
             <table>
               <thead>

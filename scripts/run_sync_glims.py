@@ -191,7 +191,7 @@ def to_ts(value: Any) -> datetime | None:
         value = value.strip().strip("()")
 
     try:
-        parsed = pd.to_datetime(value, errors="coerce", utc=True)
+        parsed = pd.to_datetime(value, errors="coerce")
     except Exception:
         return None
     if pd.isna(parsed):
@@ -344,19 +344,7 @@ def upsert_dispensaries(engine: Engine, df: pd.DataFrame) -> None:
     sql = """
         INSERT INTO glims_dispensaries ({cols})
         VALUES ({vals})
-        ON CONFLICT (lower(name)) DO UPDATE SET
-            license_number = EXCLUDED.license_number,
-            address = EXCLUDED.address,
-            abbrev = EXCLUDED.abbrev,
-            hex_code = EXCLUDED.hex_code,
-            adult_use_medical = EXCLUDED.adult_use_medical,
-            special_reporting_instructions = EXCLUDED.special_reporting_instructions,
-            parent_company = EXCLUDED.parent_company,
-            email = EXCLUDED.email,
-            phone_number = EXCLUDED.phone_number,
-            billing_contact_name = EXCLUDED.billing_contact_name,
-            billing_email = EXCLUDED.billing_email,
-            updated_at = now()
+        ON CONFLICT (lower(name)) DO NOTHING
     """.format(
         cols=", ".join(rows[0].keys()),
         vals=", ".join(f":{c}" for c in rows[0].keys()),

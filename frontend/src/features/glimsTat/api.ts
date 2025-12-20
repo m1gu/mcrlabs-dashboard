@@ -1,4 +1,4 @@
-import { parseISO } from 'date-fns'
+import { parseApiDate } from '../../utils/format'
 import { apiFetchV2 } from '../../lib/api'
 import type { GlimsTatData } from './types'
 
@@ -51,8 +51,8 @@ export async function fetchGlimsTatSamples(params: {
     samples: payload.items.map((item) => ({
       sampleId: item.sample_id,
       dispensaryName: item.dispensary_name,
-      dateReceived: item.date_received ? parseISO(item.date_received) : null,
-      reportDate: item.report_date ? parseISO(item.report_date) : null,
+      dateReceived: parseApiDate(item.date_received),
+      reportDate: parseApiDate(item.report_date),
       testsCount: item.tests_count ?? 0,
       openTimeHours: item.open_time_hours ?? 0,
       openTimeLabel: item.open_time_label || '--',

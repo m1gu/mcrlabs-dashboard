@@ -3,6 +3,12 @@ import { format, parseISO } from 'date-fns'
 export function parseApiDate(value: string | null | undefined): Date | null {
   if (!value) return null
   try {
+    // If it's just a YYYY-MM-DD string, parse it as local time using manual components
+    // This is the most robust way to avoid any timezone shifting.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split('-').map(Number)
+      return new Date(year, month - 1, day)
+    }
     return parseISO(value)
   } catch {
     return null

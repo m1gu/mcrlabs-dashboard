@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import Text, and_, case, exists, func, literal, or_, select
@@ -976,7 +977,10 @@ def get_overdue_orders(
     def _format_days_only(dt: datetime) -> str:
         if not dt:
             return "--"
-        now_dt = datetime.utcnow() # Use UTC consistent with DB
+        # Compare dates in the lab's timezone
+        now_dt = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York")).date()
+        if isinstance(dt, datetime):
+            dt = dt.date()
         delta = now_dt - dt
         days = delta.days
         # If open time is negative (future date), clamp to 0

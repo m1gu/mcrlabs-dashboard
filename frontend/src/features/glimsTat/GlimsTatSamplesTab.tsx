@@ -3,8 +3,8 @@ import * as React from 'react'
 import {
   formatDateInput,
   formatDateTimeLabel,
+  formatHoursToDays,
   formatHoursToDuration,
-  formatNumber,
 } from '../../utils/format'
 import type { GlimsTatFilters } from './types'
 import { useGlimsTat } from './useGlimsTat'
@@ -192,7 +192,6 @@ export function GlimsTatSamplesTab() {
                 <th>Received</th>
                 <th>Reported</th>
                 <th>Open time</th>
-                <th>Open time (hrs)</th>
                 <th>Tests</th>
               </tr>
             </thead>
@@ -205,20 +204,19 @@ export function GlimsTatSamplesTab() {
                   >
                     <td className="priority__order-ref">{sample.sampleId}</td>
                     <td>{sample.dispensaryName || '--'}</td>
-                    <td>{sample.dateReceived ? formatDateTimeLabel(sample.dateReceived) : '--'}</td>
-                    <td>{sample.reportDate ? formatDateTimeLabel(sample.reportDate) : '--'}</td>
+                    <td>{sample.dateReceived ? formatDateInput(sample.dateReceived) : '--'}</td>
+                    <td>{sample.reportDate ? formatDateInput(sample.reportDate) : '--'}</td>
                     <td>
                       <div className="priority__slow-open">
-                        <span>{sample.openTimeLabel}</span>
+                        <span>{formatHoursToDays(sample.openTimeHours)}</span>
                         {sample.isOutlier ? <span className="priority__slow-flag">Outlier</span> : null}
                       </div>
                     </td>
-                    <td>{formatNumber(sample.openTimeHours)}</td>
                     <td>{sample.testsCount}</td>
                   </tr>
                 ))
               ) : (
-                <EmptyTable loading={loading} colSpan={7} />
+                <EmptyTable loading={loading} colSpan={6} />
               )}
             </tbody>
           </table>

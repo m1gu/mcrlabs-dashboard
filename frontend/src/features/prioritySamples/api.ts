@@ -1,6 +1,6 @@
 import { subDays } from 'date-fns'
 import { apiFetch, apiFetchV2 } from '../../lib/api'
-import { formatApiDateTimeUtc, formatElapsedDaysHours } from '../../utils/format'
+import { formatApiDateTimeUtc, formatElapsedDaysHours, parseApiDate } from '../../utils/format'
 import type {
   HeatmapCustomer,
   HeatmapData,
@@ -101,7 +101,7 @@ function mapMetrcSamples(resp: OverdueOrdersResponse): MetrcSample[] {
     metrcDate: item.metrc_date,
     customer: item.customer_name || '--',
     // Use the backend provided label if available, fallback to calc
-    openTime: item.open_time_label || formatElapsedDaysHours(item.metrc_date ? new Date(item.metrc_date) : null),
+    openTime: item.open_time_label || formatElapsedDaysHours(parseApiDate(item.metrc_date)),
   }))
 }
 

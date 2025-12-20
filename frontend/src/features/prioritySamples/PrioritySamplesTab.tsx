@@ -1,5 +1,9 @@
 import * as React from 'react'
-import { formatDateInput, formatHoursToDays } from '../../utils/format'
+import {
+  formatDateInput,
+  formatHoursToDays,
+  parseApiDate,
+} from '../../utils/format'
 import { usePrioritySamples } from './usePrioritySamples'
 import type { PrioritySamplesFilters } from './types'
 import '../priority/priority.css'
@@ -93,7 +97,7 @@ export function PrioritySamplesTab() {
               {data.samples.map((sample) => {
                 const openLabel = sample.openHours != null ? formatHoursToDays(sample.openHours) : '--'
                 const completion = sample.testsTotal > 0 ? `${sample.testsComplete}/${sample.testsTotal}` : '0/0'
-                const receivedLabel = sample.dateReceived ? formatDateInput(new Date(sample.dateReceived)) : '--'
+                const receivedLabel = sample.dateReceived ? formatDateInput(parseApiDate(sample.dateReceived)!) : '--'
                 const expanded = expandedSampleId === sample.sampleId
                 const breachThreshold = filters.tatHours ?? DEFAULT_TAT_HOURS
                 const tatBreach = sample.openHours != null && sample.openHours >= breachThreshold
@@ -134,7 +138,7 @@ export function PrioritySamplesTab() {
                                 sample.tests.map((t) => (
                                   <tr key={`${sample.sampleId}-${t.label}-${t.startDate || 'nodate'}`}>
                                     <td>{t.label}</td>
-                                    <td>{t.startDate ? formatDateInput(new Date(t.startDate)) : '--'}</td>
+                                    <td>{t.startDate ? formatDateInput(parseApiDate(t.startDate)!) : '--'}</td>
                                     <td><StatusPill value={t.status} compact /></td>
                                   </tr>
                                 ))
