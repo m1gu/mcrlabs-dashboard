@@ -379,7 +379,7 @@ def upsert_overview(engine: Engine, df: pd.DataFrame, lookback_days: int | None,
     ]
     df["DateReceived_ts"] = df["DateReceived"].apply(to_ts)
     if lookback_days is not None:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+        cutoff = datetime.utcnow() - timedelta(days=lookback_days)
         df = df[df["DateReceived_ts"].notna()]
         df = df[df["DateReceived_ts"] >= cutoff]
     sample_ids: set[str] = set()

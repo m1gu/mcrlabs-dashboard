@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import Text, and_, case, exists, func, literal, or_, select
+from sqlalchemy import Text, and_, case, exists, func, literal, or_, select, text
 from sqlalchemy.orm import Session
 
 from downloader_qbench_data.storage import BannedEntity, Customer, MetrcSampleStatus, Order, Sample, Test
@@ -949,28 +949,22 @@ def get_overdue_orders(
     # Updated Logic: Direct Join with simple filtering for METRC samples
     # 1. Join glims_samples and metrc_sample_statuses on metrc_id
     # 2. Filter by status_window_start (last 30 days)
-    metrc_stmt = (
-        select(
-            Sample.id.label("sample_id"),
-            Sample.custom_formatted_id.label("sample_custom_id"),
-            Sample.date_created,
-            Sample.metrc_id,
-            MetrcSampleStatus.metrc_status,
-            MetrcSampleStatus.metrc_date,
-            Customer.name.label("customer_name"),
-        )
-        .select_from(Sample)
-        .join(Order, Order.id == Sample.order_id)
-        .join(Customer, Customer.id == Order.customer_account_id, isouter=True)
-        .join(MetrcSampleStatus, MetrcSampleStatus.metrc_id == Sample.metrc_id)
-        .where(
-            Sample.metrc_id.isnot(None),
-            MetrcSampleStatus.metrc_date >= status_window_start,
-            MetrcSampleStatus.metrc_date <= reference_dt,
-        )
-        .where(*_sample_visibility_conditions())
-        .order_by(MetrcSampleStatus.metrc_date.desc())
-    )
+
+    # Use raw SQL as glims_samples is not fully modeled in SQLAlchemy here
+    # and we want to bypass QBench dependencies.
+    metrc_sql = text("""
+        SELECT
+            s.sample_id,
+            s.client_name AS customer_name,
+            m.metrc_id,
+            m.metrc_status,
+            m.metrc_date,
+            s.date_received AS date_created
+        FROM glims_samples s
+        JOIN metrc_sample_statuses m ON s.metrc_id = m.metrc_id
+        WHERE m.metrc_date >= :window_start
+        ORDER BY m.metrc_date DESC
+    """)
 
     metrc_samples = []
     # Helper to format days only
@@ -986,12 +980,16 @@ def get_overdue_orders(
         # If open time is negative (future date), clamp to 0
         return f"{max(0, days)}d"
 
-    for row in session.execute(metrc_stmt):
+    for row in session.execute(metrc_sql, {"window_start": status_window_start}):
         open_time = _format_days_only(row.metrc_date)
+        
+        # Note: 'sample_id' in glims_samples is a string (e.g. S25-XXXX).
+        # The schema expects an integer 'sample_id'. 
+        # We will use 0 for the integer ID and put the real string ID in sample_custom_id.
         metrc_samples.append(
             MetrcSampleStatusItem(
-                sample_id=row.sample_id,
-                sample_custom_id=row.sample_custom_id,
+                sample_id=0, # Dummy ID as glims_samples.sample_id is a string
+                sample_custom_id=row.sample_id, # This is the real "S25-..." ID
                 date_created=row.date_created,
                 metrc_id=row.metrc_id,
                 metrc_status=row.metrc_status,
