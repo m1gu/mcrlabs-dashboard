@@ -76,3 +76,16 @@ class TatDailyPoint(BaseModel):
 
 class TatDailyResponse(BaseModel):
     points: List[TatDailyPoint]
+
+
+class NewCustomerFromSheetItem(BaseModel):
+    """Representa un nuevo customer detectado desde el Google Sheet."""
+    client_id: int = Field(..., description="Número de fila del Google Sheet")
+    client_name: str = Field(..., description="Nombre del dispensary/customer")
+    date_created: date = Field(..., description="Fecha de registro en el sistema")
+
+
+class NewCustomersFromSheetResponse(BaseModel):
+    """Respuesta del endpoint new-from-sheet."""
+    customers: List[NewCustomerFromSheetItem]
+    total: int = Field(..., description="Total de customers en el rango")

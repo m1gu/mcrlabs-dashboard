@@ -19,6 +19,10 @@ export function formatDateInput(date: Date): string {
   return format(date, 'yyyy-MM-dd')
 }
 
+export function formatDateMMDDYYYY(date: Date): string {
+  return format(date, 'MM/dd/yyyy')
+}
+
 export function formatApiDateTimeUtc(date: Date): string {
   const iso = date.toISOString()
   const [base, fractionalWithZ = '000Z'] = iso.split('.')

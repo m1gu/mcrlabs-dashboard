@@ -23,6 +23,8 @@ from downloader_qbench_data.api.schemas.glims_overview import (
     TestsByLabelResponse,
     TopCustomerItem,
     TopCustomersResponse,
+    NewCustomerFromSheetItem,
+    NewCustomersFromSheetResponse,
 )
 
 router = APIRouter(
@@ -82,6 +84,8 @@ def get_summary(
     if dispensary_id:
         filters.append("s.dispensary_id = :dispensary_id")
         params["dispensary_id"] = dispensary_id
+    
+    filters.append("s.status NOT IN ('Cancelled', 'Destroyed')")
     # Query 1: Intake Metrics (based on date_received)
     intake_where = " AND ".join(filters) # Already defined as date_received filter
     
@@ -232,6 +236,45 @@ def get_new_customers(
     rows = session.execute(text(sql), {"start": start, "end": end, "limit": limit}).all()
     customers = [NewCustomerItem(id=row.id, name=row.name, created_at=row.created_at) for row in rows]
     return NewCustomersResponse(customers=customers)
+
+
+@router.get("/customers/new-from-sheet", response_model=NewCustomersFromSheetResponse)
+def get_new_customers_from_sheet(
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+    session: Session = Depends(get_db_session),
+) -> NewCustomersFromSheetResponse:
+    """
+    Retorna los nuevos customers detectados desde el tab Dispensaries del Google Sheet.
+    Usa la tabla glims_new_customers.
+    """
+    start, end = _parse_dates(date_from, date_to)
+
+    sql = """
+        SELECT client_id, client_name, date_created
+        FROM glims_new_customers
+        WHERE date_created BETWEEN :start AND :end
+        ORDER BY client_id DESC
+        LIMIT :limit
+    """
+    rows = session.execute(text(sql), {"start": start, "end": end, "limit": limit}).all()
+
+    count_sql = """
+        SELECT COUNT(*) FROM glims_new_customers
+        WHERE date_created BETWEEN :start AND :end
+    """
+    total = session.execute(text(count_sql), {"start": start, "end": end}).scalar_one()
+
+    customers = [
+        NewCustomerFromSheetItem(
+            client_id=row.client_id,
+            client_name=row.client_name,
+            date_created=row.date_created,
+        )
+        for row in rows
+    ]
+    return NewCustomersFromSheetResponse(customers=customers, total=total)
 
 
 @router.get("/customers/top-tests", response_model=TopCustomersResponse)

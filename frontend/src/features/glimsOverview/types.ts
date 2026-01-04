@@ -29,6 +29,15 @@ export interface GlimsNewCustomersResponse {
   }>
 }
 
+export interface GlimsNewCustomersFromSheetResponse {
+  customers: Array<{
+    client_id: number
+    client_name: string
+    date_created: string
+  }>
+  total: number
+}
+
 export interface GlimsTopCustomersResponse {
   customers: Array<{
     id: number

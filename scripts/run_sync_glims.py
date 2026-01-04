@@ -353,6 +353,49 @@ def upsert_dispensaries(engine: Engine, df: pd.DataFrame) -> None:
         conn.execute(text(sql), rows)
 
 
+def detect_and_insert_new_customers(engine: Engine, df: pd.DataFrame, recorded_ids: set[int]) -> None:
+    """
+    Detect dispensaries not yet recorded in glims_new_customers and record them.
+    The client_id is the row number from the Google Sheet.
+    """
+    if df.empty or "Dispensary" not in df.columns:
+        return
+
+    new_customers: list[dict[str, Any]] = []
+    today = datetime.now().date()
+
+    for idx, row in df.iterrows():
+        name = str(row.get("Dispensary") or "").strip()
+        if not name:
+            continue
+
+        # Row number in sheet is index + 2 (1-indexed + header)
+        sheet_row_number = int(idx) + 2
+
+        if sheet_row_number in recorded_ids:
+            continue
+
+        new_customers.append({
+            "client_id": sheet_row_number,
+            "client_name": name,
+            "date_created": today,
+        })
+
+    if not new_customers:
+        LOGGER.info("No new customers detected in this sync.")
+        return
+
+    sql = """
+        INSERT INTO glims_new_customers (client_id, client_name, date_created)
+        VALUES (:client_id, :client_name, :date_created)
+        ON CONFLICT (client_id) DO NOTHING
+    """
+    with engine.begin() as conn:
+        conn.execute(text(sql), new_customers)
+
+    LOGGER.info("Inserted %d new customer(s) into glims_new_customers", len(new_customers))
+
+
 def load_dispensary_map(engine: Engine) -> dict[str, int]:
     """Return mapping of normalized name -> id."""
 
@@ -715,6 +758,14 @@ def main() -> None:
 
     df_disp = fetch_df(sheet, TAB_DISPENSARIES)
     try:
+        # Load already recorded IDs from glims_new_customers
+        recorded_ids = set()
+        with engine.begin() as conn:
+            query = conn.execute(text("SELECT client_id FROM glims_new_customers")).all()
+            recorded_ids = {row.client_id for row in query}
+
+        detect_and_insert_new_customers(engine, df_disp, recorded_ids)
+
         upsert_dispensaries(engine, df_disp)
         record(TAB_DISPENSARIES, "ok", len(df_disp))
     except Exception as exc:  # noqa: BLE001
@@ -906,7 +957,6 @@ def main() -> None:
             "Sample ID",
             "WA Analysis Prep Date",
             "WA Analysis Start Date",
-            "Lab Analyst",
             "Batch ID",
         ],
         result_cols=["wa"],

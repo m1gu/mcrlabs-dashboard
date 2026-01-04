@@ -3,7 +3,7 @@ import { formatDateLabel, parseApiDate } from '../../utils/format'
 import type { OverviewData } from '../overview/types'
 import type {
   GlimsActivityResponse,
-  GlimsNewCustomersResponse,
+  GlimsNewCustomersFromSheetResponse,
   GlimsOverviewFilters,
   GlimsSummaryResponse,
   GlimsTatDailyResponse,
@@ -20,7 +20,7 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
   const [summary, activity, newCustomers, topCustomers, labelDistribution, tatDaily] = await Promise.all([
     apiFetchV2<GlimsSummaryResponse>('/glims/overview/summary', baseParams),
     apiFetchV2<GlimsActivityResponse>('/glims/overview/activity', baseParams),
-    apiFetchV2<GlimsNewCustomersResponse>('/glims/overview/customers/new', {
+    apiFetchV2<GlimsNewCustomersFromSheetResponse>('/glims/overview/customers/new-from-sheet', {
       ...baseParams,
       limit: 10,
     }),
@@ -88,9 +88,9 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
       }) ?? [],
     newCustomers:
       newCustomers.customers?.map((customer) => ({
-        id: customer.id,
-        name: customer.name,
-        createdAt: parseApiDate(customer.created_at)!,
+        id: customer.client_id,
+        name: customer.client_name,
+        createdAt: parseApiDate(customer.date_created)!,
       })) ?? [],
     topCustomers:
       topCustomers.customers

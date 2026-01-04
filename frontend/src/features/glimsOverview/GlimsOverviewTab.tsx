@@ -1,7 +1,7 @@
 import { subDays } from 'date-fns'
 import * as React from 'react'
 import { DEFAULT_DATE_RANGE_DAYS } from '../../config'
-import { formatDateInput, formatDateLabel, formatDateTimeLabel, formatHoursToDuration, formatNumber } from '../../utils/format'
+import { formatDateInput, formatDateLabel, formatDateMMDDYYYY, formatDateTimeLabel, formatHoursToDuration, formatNumber } from '../../utils/format'
 import type { OverviewFilters, TimeframeOption } from '../overview/types'
 import { useGlimsOverviewData } from './useGlimsOverviewData'
 import '../overview/overview.css'
@@ -193,7 +193,7 @@ export function GlimsOverviewTab() {
                     <tr key={customer.id}>
                       <td>{customer.id}</td>
                       <td>{customer.name}</td>
-                      <td>{formatDateInput(customer.createdAt)}</td>
+                      <td>{formatDateMMDDYYYY(customer.createdAt)}</td>
                     </tr>
                   ))
                 ) : (
