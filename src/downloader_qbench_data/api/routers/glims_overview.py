@@ -92,12 +92,34 @@ def get_summary(
     intake_sql = f"""
         SELECT
             COUNT(*) AS samples,
-            COUNT(DISTINCT s.dispensary_id) FILTER (WHERE s.dispensary_id IS NOT NULL) AS customers,
             MAX(GREATEST(s.date_received, s.report_date)) AS last_updated_at
         FROM glims_samples s
         WHERE {intake_where}
     """
     intake_row = session.execute(text(intake_sql), params).one()
+
+    # Query New Customers from the dedicated table
+    new_customers_sql = """
+        SELECT COUNT(*)
+        FROM glims_new_customers
+        WHERE date_created BETWEEN :start AND :end
+    """
+    new_customers_params = {"start": start, "end": end}
+    
+    if dispensary_id:
+        # Get the name of the dispensary to filter glims_new_customers
+        disp_name = session.execute(
+            text("SELECT name FROM glims_dispensaries WHERE id = :id"),
+            {"id": dispensary_id}
+        ).scalar()
+        if disp_name:
+            new_customers_sql += " AND client_name = :name"
+            new_customers_params["name"] = disp_name
+        else:
+            # If dispensary doesn't exist, count is 0
+            new_customers_sql += " AND 1=0"
+
+    new_customers_count = session.execute(text(new_customers_sql), new_customers_params).scalar() or 0
 
     # Query 2: Output Metrics (based on report_date)
     # Align 'Reports' KPI with the Activity Chart (Sum of daily reported)
@@ -138,7 +160,7 @@ def get_summary(
     return OverviewSummary(
         samples=intake_row.samples or 0,
         tests=tests_total,
-        customers=intake_row.customers or 0,
+        customers=new_customers_count,
         reports=output_row.reports or 0,
         avg_tat_hours=float(output_row.avg_tat_hours) if output_row.avg_tat_hours is not None else None,
         last_sync_at=last_sync_at,
@@ -155,14 +177,14 @@ def get_activity(
 ) -> ActivityResponse:
     start, end = _parse_dates(date_from, date_to)
     params = {"start": start, "end": end}
-    disp_filter = "AND s.dispensary_id = :dispensary_id" if dispensary_id else ""
+    samples_where = ["date_received BETWEEN :start AND :end"]
     if dispensary_id:
-        params["dispensary_id"] = dispensary_id
+        samples_where.append("s.dispensary_id = :dispensary_id")
 
     samples_sql = f"""
         SELECT date_received AS d, adult_use_medical, COUNT(*) AS c
         FROM glims_samples s
-        WHERE date_received BETWEEN :start AND :end {disp_filter}
+        WHERE {" AND ".join(samples_where)}
         GROUP BY date_received, adult_use_medical
     """
     
@@ -180,10 +202,12 @@ def get_activity(
             breakdown_map[d_val] = {}
         breakdown_map[d_val][category] = breakdown_map[d_val].get(category, 0) + count
 
+    disp_clause = "AND s.dispensary_id = :dispensary_id" if dispensary_id else ""
+
     reported_sql = f"""
         SELECT report_date AS d, COUNT(*) AS c
         FROM glims_samples s
-        WHERE report_date BETWEEN :start AND :end {disp_filter}
+        WHERE report_date BETWEEN :start AND :end {disp_clause}
         GROUP BY report_date
     """
     reported_map = {row.d: row.c for row in session.execute(text(reported_sql), params)}
@@ -194,7 +218,8 @@ def get_activity(
             SELECT COALESCE(r.{date_a}, r.{date_b}, s.date_received) AS d, COUNT(*) AS c
             FROM {table} r
             JOIN glims_samples s ON s.sample_id = r.sample_id
-            WHERE COALESCE(r.{date_a}, r.{date_b}, s.date_received) BETWEEN :start AND :end {disp_filter}
+            WHERE COALESCE(r.{date_a}, r.{date_b}, s.date_received) BETWEEN :start AND :end 
+            {disp_clause}
             GROUP BY COALESCE(r.{date_a}, r.{date_b}, s.date_received)
         """
         for row in session.execute(text(test_sql), params):

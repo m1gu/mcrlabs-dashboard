@@ -158,6 +158,22 @@
   font-size: 0.95rem;
 }
 
+.overview__card-filter {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: rgba(15, 29, 59, 0.8);
+  color: var(--color-text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.overview__card-filter:hover {
+  border-color: rgba(76, 110, 245, 0.6);
+}
+
 .overview__chart {
   min-height: 240px;
   display: flex;

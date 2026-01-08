@@ -27,6 +27,9 @@ export function GlimsOverviewTab() {
   const [formFilters, setFormFilters] = React.useState<OverviewFilters>(initialFilters)
   const [filters, setFilters] = React.useState<OverviewFilters>(initialFilters)
 
+  // Local state for SAMPLES chart filter (Phase 8)
+  const [selectedType, setSelectedType] = React.useState('Adult Use')
+
   const { data, loading, error, refresh } = useGlimsOverviewData(filters)
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -115,10 +118,17 @@ export function GlimsOverviewTab() {
 
       <section className="overview__grid">
         <div className="overview__card overview__card--full">
-          <CardHeader
-            title="Samples vs Tests"
-            subtitle="Daily count of samples created, tests completed, and samples reported"
-          />
+          <CardHeader title="SAMPLES" subtitle="Daily count of samples created">
+            <select
+              className="overview__card-filter"
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+            >
+              <option value="Adult Use">Adult Use</option>
+              <option value="Medical">Medical</option>
+              <option value="AU R&D">AU R&D</option>
+            </select>
+          </CardHeader>
           <div className="overview__chart">
             {data?.dailyActivity && data.dailyActivity.length > 0 ? (
               <ResponsiveContainer width="100%" height={320}>
@@ -131,41 +141,34 @@ export function GlimsOverviewTab() {
                     labelStyle={{ color: '#f4f7ff' }}
                   />
                   <Legend />
-                  {/* Generate stacked bars for samples breakdown */}
-                  {(() => {
-                    const sampleKeys = new Set<string>()
-                    data.dailyActivity.forEach((day: any) => {
-                      Object.keys(day).forEach((key) => {
-                        if (key.startsWith('samples_')) {
-                          sampleKeys.add(key)
-                        }
-                      })
-                    })
-                    const sortedKeys = Array.from(sampleKeys).sort()
+                  <Bar
+                    dataKey={`samples_${selectedType}`}
+                    name={`Samples (${selectedType})`}
+                    fill="#FFD43B"
+                    radius={[6, 6, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState loading={loading} />
+            )}
+          </div>
+        </div>
 
-                    const colors = ['#FFD43B', '#22B8CF', '#FF922B']
-
-                    if (sortedKeys.length === 0) {
-                      return <Bar dataKey="samples" name="Samples" fill="#4C6EF5" radius={[6, 6, 0, 0]} />
-                    }
-
-                    return sortedKeys.map((key, index) => {
-                      const label = key.replace('samples_', '')
-                      // Only top bar gets radius
-                      const isLast = index === sortedKeys.length - 1
-                      const radius: [number, number, number, number] = isLast ? [6, 6, 0, 0] : [0, 0, 0, 0]
-                      return (
-                        <Bar
-                          key={key}
-                          dataKey={key}
-                          name={`Samples (${label})`}
-                          fill={colors[index % colors.length]}
-                          stackId="samples"
-                          radius={radius}
-                        />
-                      )
-                    })
-                  })()}
+        <div className="overview__card overview__card--full">
+          <CardHeader title="TESTS" subtitle="Daily count of tests completed and samples reported" />
+          <div className="overview__chart">
+            {data?.dailyActivity && data.dailyActivity.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={data.dailyActivity}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.08)" vertical={false} />
+                  <XAxis dataKey="label" stroke="var(--color-text-secondary)" tickLine={false} />
+                  <YAxis stroke="var(--color-text-secondary)" tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: '#0f1d3b', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}
+                    labelStyle={{ color: '#f4f7ff' }}
+                  />
+                  <Legend />
                   <Bar dataKey="tests" name="Tests" fill="#7EE787" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="testsReported" name="Samples reported" fill="#F472B6" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -363,13 +366,17 @@ function KpiCard({ label, value, subtitle, accent = 'default' }: KpiCardProps) {
 type CardHeaderProps = {
   title: string
   subtitle?: string
+  children?: React.ReactNode
 }
 
-function CardHeader({ title, subtitle }: CardHeaderProps) {
+function CardHeader({ title, subtitle, children }: CardHeaderProps) {
   return (
-    <header className="overview__card-header">
-      <h2>{title}</h2>
-      {subtitle && <p>{subtitle}</p>}
+    <header className="overview__card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div>
+        <h2>{title}</h2>
+        {subtitle && <p>{subtitle}</p>}
+      </div>
+      {children}
     </header>
   )
 }
