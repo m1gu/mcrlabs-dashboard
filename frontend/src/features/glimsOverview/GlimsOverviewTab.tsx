@@ -19,7 +19,17 @@ function createInitialFilters(): OverviewFilters {
     dateFrom: formatDateInput(from),
     dateTo: formatDateInput(today),
     timeframe: 'daily',
+    sampleType: 'All',
   }
+}
+
+const SAMPLE_TYPES = ['Adult Use', 'Medical', 'AU R&D']
+
+const TYPE_COLORS: Record<string, { samples: string; tests: string; reports: string }> = {
+  'Adult Use': { samples: '#3B82F6', tests: '#38BDF8', reports: '#FACC15' }, // Created: Azul, Tests: Celeste, Reported: Amarillo
+  Medical: { samples: '#2DD4BF', tests: '#FB923C', reports: '#38BDF8' },    // Created: Aquamarina, Tests: Naranja, Reported: Celeste
+  'AU R&D': { samples: '#4ADE80', tests: '#4ADE80', reports: '#A855F7' },   // Created: Verde, Tests: Verde, Reported: Lila
+  Unknown: { samples: '#94A3B8', tests: '#64748B', reports: '#475569' },
 }
 
 export function GlimsOverviewTab() {
@@ -27,8 +37,8 @@ export function GlimsOverviewTab() {
   const [formFilters, setFormFilters] = React.useState<OverviewFilters>(initialFilters)
   const [filters, setFilters] = React.useState<OverviewFilters>(initialFilters)
 
-  // Local state for SAMPLES chart filter (Phase 8)
-  const [selectedType, setSelectedType] = React.useState('Adult Use')
+  // Local state for multi-select checkboxes
+  const [selectedTypes, setSelectedTypes] = React.useState<string[]>(SAMPLE_TYPES)
 
   const { data, loading, error, refresh } = useGlimsOverviewData(filters)
 
@@ -40,6 +50,10 @@ export function GlimsOverviewTab() {
     }))
   }
 
+  const handleTypeToggle = (type: string) => {
+    setSelectedTypes((prev) => (prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]))
+  }
+
   const handleRefresh = () => {
     const isSameFilters =
       formFilters.dateFrom === filters.dateFrom &&
@@ -49,9 +63,55 @@ export function GlimsOverviewTab() {
     if (isSameFilters) {
       void refresh()
     } else {
-      setFilters(formFilters)
+      setFilters({ ...formFilters, sampleType: 'All' })
     }
   }
+
+  // Aggregate KPIs based on selected types
+  const aggregatedKpis = React.useMemo(() => {
+    const summary = data?.summary
+    if (!summary) return null
+
+    let samples = 0
+    let tests = 0
+    let reports = 0
+    let totalTatWeight = 0
+    let totalTatReports = 0
+
+    selectedTypes.forEach((type) => {
+      const typeReports = summary.reportsByType?.[type] || 0
+      const typeTat = summary.tatByType?.[type] || 0
+
+      samples += summary.samplesByType?.[type] || 0
+      tests += summary.testsByType?.[type] || 0
+      reports += typeReports
+
+      if (typeTat > 0 && typeReports > 0) {
+        totalTatWeight += typeTat * typeReports
+        totalTatReports += typeReports
+      }
+    })
+
+    const avgTatHours = totalTatReports > 0 ? totalTatWeight / totalTatReports : null
+
+    return { samples, tests, reports, avgTatHours }
+  }, [data, selectedTypes])
+
+  // Prepare chart data with segmented keys
+  const segmentedActivity = React.useMemo(() => {
+    return (
+      data?.dailyActivity.map((point) => {
+        const item: any = { ...point }
+        selectedTypes.forEach((type) => {
+          const safeType = type.replace(/\s+/g, '_')
+          item[`samples_${safeType}`] = point.samplesBreakdown?.[type] || 0
+          item[`tests_${safeType}`] = point.testsBreakdown?.[type] || 0
+          item[`reports_${safeType}`] = point.reportedBreakdown?.[type] || 0
+        })
+        return item
+      }) ?? []
+    )
+  }, [data, selectedTypes])
 
   const lastUpdateLabel = React.useMemo(() => {
     if (!data?.summary.lastUpdatedAt) return 'No update timestamp available'
@@ -106,33 +166,39 @@ export function GlimsOverviewTab() {
         </div>
       </section>
 
+      <aside className="overview__floating-filter">
+        <h3 className="overview__floating-filter-title">Sample Type</h3>
+        <div className="overview__checkbox-group">
+          {SAMPLE_TYPES.map((type) => (
+            <label key={type} className="overview__checkbox-label">
+              <input type="checkbox" checked={selectedTypes.includes(type)} onChange={() => handleTypeToggle(type)} />
+              <span>{type}</span>
+            </label>
+          ))}
+        </div>
+      </aside>
+
       {error && <div className="overview__error">Failed to load overview: {error}</div>}
 
       <section className="overview__kpis">
-        <KpiCard label="Samples" value={formatNumber(data?.summary.samples ?? null)} />
-        <KpiCard label="Tests" value={formatNumber(data?.summary.tests ?? null)} />
+        <KpiCard label="Samples" value={formatNumber(aggregatedKpis?.samples ?? null)} />
+        <KpiCard label="Tests" value={formatNumber(aggregatedKpis?.tests ?? null)} />
         <KpiCard label="New customers" value={formatNumber(data?.summary.customers ?? null)} />
-        <KpiCard label="Reports (samples reported)" value={formatNumber(data?.summary.reports ?? null)} />
-        <KpiCard label="Avg TAT" value={formatHoursToDuration(data?.summary.avgTatHours ?? null)} accent="highlight" />
+        <KpiCard label="Reports (samples reported)" value={formatNumber(aggregatedKpis?.reports ?? null)} />
+        <KpiCard
+          label="Avg TAT"
+          value={formatHoursToDuration(aggregatedKpis?.avgTatHours ?? null)}
+          accent="highlight"
+        />
       </section>
 
       <section className="overview__grid">
         <div className="overview__card overview__card--full">
-          <CardHeader title="SAMPLES" subtitle="Daily count of samples created">
-            <select
-              className="overview__card-filter"
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-            >
-              <option value="Adult Use">Adult Use</option>
-              <option value="Medical">Medical</option>
-              <option value="AU R&D">AU R&D</option>
-            </select>
-          </CardHeader>
+          <CardHeader title="SAMPLES" subtitle="Daily count of samples created and reported (segmented by type)" />
           <div className="overview__chart">
-            {data?.dailyActivity && data.dailyActivity.length > 0 ? (
+            {segmentedActivity.length > 0 ? (
               <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={data.dailyActivity}>
+                <BarChart data={segmentedActivity}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.08)" vertical={false} />
                   <XAxis dataKey="label" stroke="var(--color-text-secondary)" tickLine={false} />
                   <YAxis stroke="var(--color-text-secondary)" tickLine={false} axisLine={false} />
@@ -141,12 +207,24 @@ export function GlimsOverviewTab() {
                     labelStyle={{ color: '#f4f7ff' }}
                   />
                   <Legend />
-                  <Bar
-                    dataKey={`samples_${selectedType}`}
-                    name={`Samples (${selectedType})`}
-                    fill="#FFD43B"
-                    radius={[6, 6, 0, 0]}
-                  />
+                  {selectedTypes.map((type) => (
+                    <Bar
+                      key={`samples_${type}`}
+                      stackId="samples"
+                      dataKey={`samples_${type.replace(/\s+/g, '_')}`}
+                      name={`Samples (${type})`}
+                      fill={TYPE_COLORS[type]?.samples || TYPE_COLORS.Unknown.samples}
+                    />
+                  ))}
+                  {selectedTypes.map((type) => (
+                    <Bar
+                      key={`reports_${type}`}
+                      stackId="reports"
+                      dataKey={`reports_${type.replace(/\s+/g, '_')}`}
+                      name={`Reported (${type})`}
+                      fill={TYPE_COLORS[type]?.reports || TYPE_COLORS.Unknown.reports}
+                    />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -156,11 +234,11 @@ export function GlimsOverviewTab() {
         </div>
 
         <div className="overview__card overview__card--full">
-          <CardHeader title="TESTS" subtitle="Daily count of tests completed and samples reported" />
+          <CardHeader title="TESTS" subtitle="Daily count of tests completed (segmented by type)" />
           <div className="overview__chart">
-            {data?.dailyActivity && data.dailyActivity.length > 0 ? (
+            {segmentedActivity.length > 0 ? (
               <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={data.dailyActivity}>
+                <BarChart data={segmentedActivity}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.08)" vertical={false} />
                   <XAxis dataKey="label" stroke="var(--color-text-secondary)" tickLine={false} />
                   <YAxis stroke="var(--color-text-secondary)" tickLine={false} axisLine={false} />
@@ -169,8 +247,15 @@ export function GlimsOverviewTab() {
                     labelStyle={{ color: '#f4f7ff' }}
                   />
                   <Legend />
-                  <Bar dataKey="tests" name="Tests" fill="#7EE787" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="testsReported" name="Samples reported" fill="#F472B6" radius={[6, 6, 0, 0]} />
+                  {selectedTypes.map((type) => (
+                    <Bar
+                      key={`tests_${type}`}
+                      stackId="tests"
+                      dataKey={`tests_${type.replace(/\s+/g, '_')}`}
+                      name={`Tests (${type})`}
+                      fill={TYPE_COLORS[type]?.tests || TYPE_COLORS.Unknown.tests}
+                    />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -238,11 +323,21 @@ export function GlimsOverviewTab() {
         </div>
 
         <div className="overview__card">
-          <CardHeader title="Types of tests most requested" subtitle="Distribution by assay type" />
+          <CardHeader title="Types of tests most requested" subtitle="Distribution by assay type (filtered by selection)" />
           <div className="overview__chart overview__chart--compact">
             {data?.testsByLabel?.length ? (
               <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={data.testsByLabel} layout="vertical" margin={{ left: 2, right: 8 }}>
+                <BarChart
+                  data={data.testsByLabel.map((item) => {
+                    const row: any = { label: item.label }
+                    selectedTypes.forEach((type) => {
+                      row[type] = item.breakdown?.[type] || 0
+                    })
+                    return row
+                  })}
+                  layout="vertical"
+                  margin={{ left: 2, right: 8 }}
+                >
                   <XAxis type="number" stroke="var(--color-text-secondary)" />
                   <YAxis
                     type="category"
@@ -256,7 +351,17 @@ export function GlimsOverviewTab() {
                     contentStyle={{ background: '#0f1d3b', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}
                     labelStyle={{ color: '#f4f7ff' }}
                   />
-                  <Bar dataKey="count" name="Tests" fill="#7EE787" radius={[0, 8, 8, 0]} barSize={14} />
+                  <Legend />
+                  {selectedTypes.map((type) => (
+                    <Bar
+                      key={type}
+                      stackId="tests"
+                      dataKey={type}
+                      name={type}
+                      fill={TYPE_COLORS[type]?.tests || TYPE_COLORS.Unknown.tests}
+                      barSize={14}
+                    />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             ) : (

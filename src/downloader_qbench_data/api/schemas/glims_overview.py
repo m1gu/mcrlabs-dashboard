@@ -14,6 +14,10 @@ class OverviewSummary(BaseModel):
     customers: int
     reports: int
     avg_tat_hours: Optional[float] = None
+    samples_by_type: dict[str, int] = {}
+    tests_by_type: dict[str, int] = {}
+    reports_by_type: dict[str, int] = {}
+    tat_by_type: dict[str, float] = {}
     last_sync_at: Optional[datetime] = Field(
         None,
         description="Timestamp of the latest successful GLIMS sync run.",
@@ -30,6 +34,8 @@ class ActivityPoint(BaseModel):
     tests: int
     samples_reported: int
     samples_breakdown: dict[str, int] = {}
+    tests_breakdown: dict[str, int] = {}
+    reported_breakdown: dict[str, int] = {}
 
 
 class ActivityResponse(BaseModel):
@@ -60,6 +66,7 @@ class TopCustomersResponse(BaseModel):
 class TestsByLabelItem(BaseModel):
     key: str
     count: int
+    breakdown: dict[str, int] = {}
 
 
 class TestsByLabelResponse(BaseModel):

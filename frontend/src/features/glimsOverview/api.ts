@@ -18,8 +18,8 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
   }
 
   const [summary, activity, newCustomers, topCustomers, labelDistribution, tatDaily] = await Promise.all([
-    apiFetchV2<GlimsSummaryResponse>('/glims/overview/summary', baseParams),
-    apiFetchV2<GlimsActivityResponse>('/glims/overview/activity', baseParams),
+    apiFetchV2<GlimsSummaryResponse>('/glims/overview/summary', { ...baseParams, sample_type: filters.sampleType }),
+    apiFetchV2<GlimsActivityResponse>('/glims/overview/activity', { ...baseParams, sample_type: filters.sampleType }),
     apiFetchV2<GlimsNewCustomersFromSheetResponse>('/glims/overview/customers/new-from-sheet', {
       ...baseParams,
       limit: 10,
@@ -28,9 +28,10 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
       ...baseParams,
       limit: 10,
     }),
-    apiFetchV2<GlimsTestsByLabelResponse>('/glims/overview/tests/by-label', baseParams),
+    apiFetchV2<GlimsTestsByLabelResponse>('/glims/overview/tests/by-label', { ...baseParams, sample_type: filters.sampleType }),
     apiFetchV2<GlimsTatDailyResponse>('/glims/overview/tat-daily', {
       ...baseParams,
+      sample_type: filters.sampleType,
       tat_target_hours: 72,
       moving_average_window: filters.timeframe === 'weekly' ? 14 : 7,
     }),
@@ -56,6 +57,10 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
       customers: summary.customers,
       reports: summary.reports,
       avgTatHours: summary.avg_tat_hours,
+      samplesByType: summary.samples_by_type,
+      testsByType: summary.tests_by_type,
+      reportsByType: summary.reports_by_type,
+      tatByType: summary.tat_by_type,
       lastUpdatedAt: summary.last_updated_at ? parseApiDate(summary.last_updated_at) : null,
       rangeStart: parseApiDate(filters.dateFrom),
       rangeEnd: parseApiDate(filters.dateTo),
@@ -68,22 +73,15 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
     dailyActivity:
       activity.points?.map((point) => {
         const date = parseApiDate(point.date)!
-        const breakdown = point.samples_breakdown || {}
-        const flattenedBreakdown: Record<string, number> = {}
-        Object.entries(breakdown).forEach(([key, count]) => {
-          // Normalize key to be safe for recharts (remove spaces/special chars if needed)
-          // For now we keep it simple or just use the key directly if it's clean enough
-          // We'll prefix to avoid collisions
-          flattenedBreakdown[`samples_${key}`] = count
-        })
-
         return {
           date,
           label: formatDateLabel(date),
           samples: point.samples,
           tests: point.tests,
           testsReported: point.samples_reported,
-          ...flattenedBreakdown,
+          samplesBreakdown: point.samples_breakdown,
+          testsBreakdown: point.tests_breakdown,
+          reportedBreakdown: point.reported_breakdown,
         }
       }) ?? [],
     newCustomers:
@@ -106,6 +104,7 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
         ?.map((item) => ({
           label: item.key,
           count: item.count,
+          breakdown: item.breakdown,
         }))
         .sort((a, b) => b.count - a.count) ?? [],
     tatDaily: tatDailySeries,

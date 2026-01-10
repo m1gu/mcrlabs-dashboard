@@ -8,6 +8,10 @@ export interface GlimsSummaryResponse {
   customers: number
   reports: number
   avg_tat_hours: number | null
+  samples_by_type?: Record<string, number>
+  tests_by_type?: Record<string, number>
+  reports_by_type?: Record<string, number>
+  tat_by_type?: Record<string, number>
   last_updated_at: string | null
 }
 
@@ -18,6 +22,8 @@ export interface GlimsActivityResponse {
     tests: number
     samples_reported: number
     samples_breakdown?: Record<string, number>
+    tests_breakdown?: Record<string, number>
+    reported_breakdown?: Record<string, number>
   }>
 }
 
@@ -51,6 +57,7 @@ export interface GlimsTestsByLabelResponse {
   labels: Array<{
     key: string
     count: number
+    breakdown?: Record<string, number>
   }>
 }
 

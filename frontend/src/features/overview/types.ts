@@ -4,6 +4,7 @@ export interface OverviewFilters {
   dateFrom: string
   dateTo: string
   timeframe: TimeframeOption
+  sampleType?: string
 }
 
 export interface MetricsSummaryResponse {
@@ -84,6 +85,10 @@ export interface OverviewData {
     customers: number
     reports: number
     avgTatHours: number | null
+    samplesByType?: Record<string, number>
+    testsByType?: Record<string, number>
+    reportsByType?: Record<string, number>
+    tatByType?: Record<string, number>
     lastUpdatedAt: Date | null
     rangeStart: Date | null
     rangeEnd: Date | null
@@ -99,6 +104,9 @@ export interface OverviewData {
     samples: number
     tests: number
     testsReported: number
+    samplesBreakdown?: Record<string, number>
+    testsBreakdown?: Record<string, number>
+    reportedBreakdown?: Record<string, number>
   }>
   newCustomers: Array<{
     id: number
@@ -114,6 +122,7 @@ export interface OverviewData {
   testsByLabel: Array<{
     label: string
     count: number
+    breakdown?: Record<string, number>
   }>
   tatDaily: Array<{
     date: Date

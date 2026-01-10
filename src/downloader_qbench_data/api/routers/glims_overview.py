@@ -74,6 +74,7 @@ def get_summary(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
     dispensary_id: Optional[int] = Query(None),
+    sample_type: Optional[str] = Query(None),
     settings: AppSettings = Depends(get_app_settings),
     session: Session = Depends(get_db_session),
 ) -> OverviewSummary:
@@ -84,19 +85,33 @@ def get_summary(
     if dispensary_id:
         filters.append("s.dispensary_id = :dispensary_id")
         params["dispensary_id"] = dispensary_id
+    if sample_type and sample_type != 'All':
+        filters.append("s.adult_use_medical = :sample_type")
+        params["sample_type"] = sample_type
     
     filters.append("s.status NOT IN ('Cancelled', 'Destroyed')")
     # Query 1: Intake Metrics (based on date_received)
     intake_where = " AND ".join(filters) # Already defined as date_received filter
     
+    # Query 1: Intake Metrics (based on date_received)
     intake_sql = f"""
         SELECT
             COUNT(*) AS samples,
+            adult_use_medical,
             MAX(GREATEST(s.date_received, s.report_date)) AS last_updated_at
         FROM glims_samples s
         WHERE {intake_where}
+        GROUP BY adult_use_medical
     """
-    intake_row = session.execute(text(intake_sql), params).one()
+    samples_total = 0
+    samples_by_type = {}
+    last_updated_at = None
+    for row in session.execute(text(intake_sql), params):
+        samples_total += row.samples
+        samples_by_type[row.adult_use_medical or "Unknown"] = row.samples
+        if row.last_updated_at:
+            if last_updated_at is None or row.last_updated_at > last_updated_at:
+                last_updated_at = row.last_updated_at
 
     # Query New Customers from the dedicated table
     new_customers_sql = """
@@ -107,7 +122,6 @@ def get_summary(
     new_customers_params = {"start": start, "end": end}
     
     if dispensary_id:
-        # Get the name of the dispensary to filter glims_new_customers
         disp_name = session.execute(
             text("SELECT name FROM glims_dispensaries WHERE id = :id"),
             {"id": dispensary_id}
@@ -116,26 +130,40 @@ def get_summary(
             new_customers_sql += " AND client_name = :name"
             new_customers_params["name"] = disp_name
         else:
-            # If dispensary doesn't exist, count is 0
             new_customers_sql += " AND 1=0"
 
     new_customers_count = session.execute(text(new_customers_sql), new_customers_params).scalar() or 0
 
     # Query 2: Output Metrics (based on report_date)
-    # Align 'Reports' KPI with the Activity Chart (Sum of daily reported)
     output_filters = ["s.report_date BETWEEN :start AND :end"]
     if dispensary_id:
         output_filters.append("s.dispensary_id = :dispensary_id")
+    if sample_type and sample_type != 'All':
+        output_filters.append("s.adult_use_medical = :sample_type")
     output_where = " AND ".join(output_filters)
 
     output_sql = f"""
         SELECT
             COUNT(*) AS reports,
+            adult_use_medical,
             AVG(EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0) AS avg_tat_hours
         FROM glims_samples s
         WHERE {output_where}
+        GROUP BY adult_use_medical
     """
-    output_row = session.execute(text(output_sql), params).one()
+    reports_total = 0
+    reports_by_type = {}
+    tat_by_type = {}
+    total_tat_hours = 0.0
+    tat_count = 0
+    for row in session.execute(text(output_sql), params):
+        reports_total += row.reports
+        type_key = row.adult_use_medical or "Unknown"
+        reports_by_type[type_key] = row.reports
+        if row.avg_tat_hours is not None:
+            tat_by_type[type_key] = float(row.avg_tat_hours)
+            total_tat_hours += float(row.avg_tat_hours) * row.reports
+            tat_count += row.reports
 
     sync_sql = """
         SELECT finished_at
@@ -147,24 +175,34 @@ def get_summary(
     last_sync_at = session.execute(text(sync_sql)).scalar_one_or_none()
 
     tests_total = 0
+    tests_by_type = {}
     for label, (table, date_a, date_b) in ASSAY_TABLES.items():
         test_sql = f"""
-            SELECT COUNT(*) AS c
+            SELECT COUNT(*) AS c, s.adult_use_medical
             FROM {table} r
             JOIN glims_samples s ON s.sample_id = r.sample_id
             WHERE COALESCE(r.{date_a}, r.{date_b}, s.date_received) BETWEEN :start AND :end
             {"AND s.dispensary_id = :dispensary_id" if dispensary_id else ""}
+            {"AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""}
+            GROUP BY s.adult_use_medical
         """
-        tests_total += session.execute(text(test_sql), params).scalar_one()
+        for row in session.execute(text(test_sql), params):
+            tests_total += row.c
+            cat = row.adult_use_medical or "Unknown"
+            tests_by_type[cat] = tests_by_type.get(cat, 0) + row.c
 
     return OverviewSummary(
-        samples=intake_row.samples or 0,
+        samples=samples_total,
         tests=tests_total,
         customers=new_customers_count,
-        reports=output_row.reports or 0,
-        avg_tat_hours=float(output_row.avg_tat_hours) if output_row.avg_tat_hours is not None else None,
+        reports=reports_total,
+        avg_tat_hours=total_tat_hours / tat_count if tat_count > 0 else None,
+        samples_by_type=samples_by_type,
+        tests_by_type=tests_by_type,
+        reports_by_type=reports_by_type,
+        tat_by_type=tat_by_type,
         last_sync_at=last_sync_at,
-        last_updated_at=intake_row.last_updated_at,
+        last_updated_at=last_updated_at,
     )
 
 
@@ -173,19 +211,23 @@ def get_activity(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
     dispensary_id: Optional[int] = Query(None),
+    sample_type: Optional[str] = Query(None),
     session: Session = Depends(get_db_session),
 ) -> ActivityResponse:
     start, end = _parse_dates(date_from, date_to)
     params = {"start": start, "end": end}
-    samples_where = ["date_received BETWEEN :start AND :end"]
+    samples_where = ["s.date_received BETWEEN :start AND :end"]
     if dispensary_id:
         samples_where.append("s.dispensary_id = :dispensary_id")
+    if sample_type and sample_type != 'All':
+        samples_where.append("s.adult_use_medical = :sample_type")
+        params["sample_type"] = sample_type
 
     samples_sql = f"""
-        SELECT date_received AS d, adult_use_medical, COUNT(*) AS c
+        SELECT s.date_received AS d, s.adult_use_medical, COUNT(*) AS c
         FROM glims_samples s
         WHERE {" AND ".join(samples_where)}
-        GROUP BY date_received, adult_use_medical
+        GROUP BY s.date_received, s.adult_use_medical
     """
     
     samples_map: dict[date, int] = {}
@@ -203,27 +245,42 @@ def get_activity(
         breakdown_map[d_val][category] = breakdown_map[d_val].get(category, 0) + count
 
     disp_clause = "AND s.dispensary_id = :dispensary_id" if dispensary_id else ""
+    type_clause = "AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""
 
     reported_sql = f"""
-        SELECT report_date AS d, COUNT(*) AS c
+        SELECT s.report_date AS d, s.adult_use_medical, COUNT(*) AS c
         FROM glims_samples s
-        WHERE report_date BETWEEN :start AND :end {disp_clause}
-        GROUP BY report_date
+        WHERE s.report_date BETWEEN :start AND :end {disp_clause} {type_clause}
+        GROUP BY s.report_date, s.adult_use_medical
     """
-    reported_map = {row.d: row.c for row in session.execute(text(reported_sql), params)}
+    reported_map: dict[date, int] = {}
+    reported_breakdown: dict[date, dict[str, int]] = {}
+    for row in session.execute(text(reported_sql), params):
+        d_val = row.d
+        cat = row.adult_use_medical or "Unknown"
+        reported_map[d_val] = reported_map.get(d_val, 0) + row.c
+        if d_val not in reported_breakdown:
+            reported_breakdown[d_val] = {}
+        reported_breakdown[d_val][cat] = row.c
 
     tests_map: dict[date, int] = {}
+    tests_breakdown: dict[date, dict[str, int]] = {}
     for label, (table, date_a, date_b) in ASSAY_TABLES.items():
         test_sql = f"""
-            SELECT COALESCE(r.{date_a}, r.{date_b}, s.date_received) AS d, COUNT(*) AS c
+            SELECT COALESCE(r.{date_a}, r.{date_b}, s.date_received) AS d, s.adult_use_medical, COUNT(*) AS c
             FROM {table} r
             JOIN glims_samples s ON s.sample_id = r.sample_id
             WHERE COALESCE(r.{date_a}, r.{date_b}, s.date_received) BETWEEN :start AND :end 
-            {disp_clause}
-            GROUP BY COALESCE(r.{date_a}, r.{date_b}, s.date_received)
+            {disp_clause} {type_clause}
+            GROUP BY COALESCE(r.{date_a}, r.{date_b}, s.date_received), s.adult_use_medical
         """
         for row in session.execute(text(test_sql), params):
-            tests_map[row.d] = tests_map.get(row.d, 0) + row.c
+            d_val = row.d
+            cat = row.adult_use_medical or "Unknown"
+            tests_map[d_val] = tests_map.get(d_val, 0) + row.c
+            if d_val not in tests_breakdown:
+                tests_breakdown[d_val] = {}
+            tests_breakdown[d_val][cat] = tests_breakdown[d_val].get(cat, 0) + row.c
 
     points: list[ActivityPoint] = []
     current = start
@@ -235,6 +292,8 @@ def get_activity(
                 tests=tests_map.get(current, 0),
                 samples_reported=reported_map.get(current, 0),
                 samples_breakdown=breakdown_map.get(current, {}),
+                tests_breakdown=tests_breakdown.get(current, {}),
+                reported_breakdown=reported_breakdown.get(current, {}),
             )
         )
         current += timedelta(days=1)
@@ -350,6 +409,7 @@ def get_top_customers(
 def get_tests_by_label(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    sample_type: Optional[str] = Query(None),
     session: Session = Depends(get_db_session),
 ) -> TestsByLabelResponse:
     start, end = _parse_dates(date_from, date_to)
@@ -357,13 +417,23 @@ def get_tests_by_label(
     labels: list[TestsByLabelItem] = []
     for label, (table, date_a, date_b) in ASSAY_TABLES.items():
         sql = f"""
-            SELECT COUNT(*) AS c
+            SELECT COUNT(*) AS c, s.adult_use_medical
             FROM {table} r
             JOIN glims_samples s ON s.sample_id = r.sample_id
             WHERE COALESCE(r.{date_a}, r.{date_b}, s.date_received) BETWEEN :start AND :end
+            {"AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""}
+            GROUP BY s.adult_use_medical
         """
-        count = session.execute(text(sql), params).scalar_one()
-        labels.append(TestsByLabelItem(key=label, count=count))
+        if sample_type and sample_type != 'All':
+            params["sample_type"] = sample_type
+        
+        total_for_label = 0
+        breakdown = {}
+        for row in session.execute(text(sql), params):
+            total_for_label += row.c
+            breakdown[row.adult_use_medical or "Unknown"] = row.c
+        
+        labels.append(TestsByLabelItem(key=label, count=total_for_label, breakdown=breakdown))
     labels.sort(key=lambda x: x.count, reverse=True)
     return TestsByLabelResponse(labels=labels)
 
@@ -372,24 +442,28 @@ def get_tests_by_label(
 def get_tat_daily(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    sample_type: Optional[str] = Query(None),
     tat_target_hours: float = Query(72.0, ge=1.0),
     moving_average_window: int = Query(7, ge=1, le=30),
     session: Session = Depends(get_db_session),
 ) -> TatDailyResponse:
     start, end = _parse_dates(date_from, date_to)
     params = {"start": start, "end": end, "tat_target_hours": tat_target_hours}
-    sql = """
+    sql = f"""
         SELECT
-            report_date AS d,
-            AVG(EXTRACT(EPOCH FROM (report_date::timestamp - date_received::timestamp))/3600.0) AS avg_hours,
-            COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (report_date::timestamp - date_received::timestamp))/3600.0 <= :tat_target_hours) AS within_tat,
-            COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (report_date::timestamp - date_received::timestamp))/3600.0 > :tat_target_hours) AS beyond_tat
-        FROM glims_samples
-        WHERE report_date BETWEEN :start AND :end
-          AND date_received IS NOT NULL
-        GROUP BY report_date
-        ORDER BY report_date
+            s.report_date AS d,
+            AVG(EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0) AS avg_hours,
+            COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0 <= :tat_target_hours) AS within_tat,
+            COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0 > :tat_target_hours) AS beyond_tat
+        FROM glims_samples s
+        WHERE s.report_date BETWEEN :start AND :end
+          AND s.date_received IS NOT NULL
+          {"AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""}
+        GROUP BY s.report_date
+        ORDER BY s.report_date
     """
+    if sample_type and sample_type != 'All':
+        params["sample_type"] = sample_type
     rows = session.execute(text(sql), params).all()
     points: list[TatDailyPoint] = []
     for row in rows:
