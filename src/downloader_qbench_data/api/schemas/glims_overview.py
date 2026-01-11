@@ -78,6 +78,9 @@ class TatDailyPoint(BaseModel):
     average_hours: Optional[float] = None
     within_tat: int
     beyond_tat: int
+    within_breakdown: dict[str, int] = {}
+    beyond_breakdown: dict[str, int] = {}
+    hours_breakdown: dict[str, float] = {}
     moving_average_hours: Optional[float] = None
 
 

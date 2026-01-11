@@ -131,5 +131,8 @@ export interface OverviewData {
     beyondSla: number
     averageHours: number | null
     movingAverageHours: number | null
+    withinBreakdown?: Record<string, number>
+    beyondBreakdown?: Record<string, number>
+    hoursBreakdown?: Record<string, number>
   }>
 }

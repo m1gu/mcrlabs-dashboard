@@ -234,8 +234,8 @@
     grid-column: 1 / -1;
   }
 
-  .overview__card:nth-of-type(1) {
-    grid-column: 1 / -1;
+  .overview__card.overview__card--half {
+    grid-column: span 6;
   }
 }
 

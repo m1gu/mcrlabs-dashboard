@@ -5,7 +5,7 @@ import { formatDateInput, formatDateLabel, formatDateMMDDYYYY, formatDateTimeLab
 import type { OverviewFilters, TimeframeOption } from '../overview/types'
 import { useGlimsOverviewData } from './useGlimsOverviewData'
 import '../overview/overview.css'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, AreaChart, Area, Line, ReferenceLine } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, AreaChart, Area, Line, LineChart, ReferenceLine } from 'recharts'
 
 const TIMEFRAME_OPTIONS: Array<{ value: TimeframeOption; label: string }> = [
   { value: 'daily', label: 'Daily' },
@@ -26,9 +26,9 @@ function createInitialFilters(): OverviewFilters {
 const SAMPLE_TYPES = ['Adult Use', 'Medical', 'AU R&D']
 
 const TYPE_COLORS: Record<string, { samples: string; tests: string; reports: string }> = {
-  'Adult Use': { samples: '#3B82F6', tests: '#38BDF8', reports: '#FACC15' }, // Created: Azul, Tests: Celeste, Reported: Amarillo
-  Medical: { samples: '#2DD4BF', tests: '#FB923C', reports: '#38BDF8' },    // Created: Aquamarina, Tests: Naranja, Reported: Celeste
-  'AU R&D': { samples: '#4ADE80', tests: '#4ADE80', reports: '#A855F7' },   // Created: Verde, Tests: Verde, Reported: Lila
+  'Adult Use': { samples: '#38BDF8', tests: '#38BDF8', reports: '#38BDF8' }, // Celeste
+  Medical: { samples: '#FB923C', tests: '#FB923C', reports: '#FB923C' },    // Naranja
+  'AU R&D': { samples: '#4ADE80', tests: '#4ADE80', reports: '#4ADE80' },   // Verde
   Unknown: { samples: '#94A3B8', tests: '#64748B', reports: '#475569' },
 }
 
@@ -113,6 +113,52 @@ export function GlimsOverviewTab() {
     )
   }, [data, selectedTypes])
 
+  // Aggregate TAT data based on selected types
+  const aggregatedTatDaily = React.useMemo(() => {
+    if (!data?.tatDaily) return []
+
+    const points = data.tatDaily.map((point) => {
+      let withinSla = 0
+      let beyondSla = 0
+      let totalWeight = 0
+      let totalReports = 0
+
+      selectedTypes.forEach((type) => {
+        const typeWithin = point.withinBreakdown?.[type] || 0
+        const typeBeyond = point.beyondBreakdown?.[type] || 0
+        const typeHours = (point as any).hours_breakdown?.[type] || 0
+
+        withinSla += typeWithin
+        beyondSla += typeBeyond
+
+        const typeReports = typeWithin + typeBeyond
+        if (typeReports > 0 && typeHours > 0) {
+          totalWeight += typeHours * typeReports
+          totalReports += typeReports
+        }
+      })
+
+      const averageHours = totalReports > 0 ? totalWeight / totalReports : null
+
+      return {
+        ...point,
+        withinSla,
+        beyondSla,
+        averageHours,
+      }
+    })
+
+    // Re-calculate moving average for the aggregated data
+    const windowSize = filters.timeframe === 'weekly' ? 14 : 7
+    return points.map((point, idx) => {
+      const start = Math.max(0, idx - windowSize + 1)
+      const window = points.slice(start, idx + 1)
+      const values = window.map((p) => p.averageHours).filter((v): v is number => v !== null)
+      const movingAverageHours = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null
+      return { ...point, movingAverageHours }
+    })
+  }, [data, selectedTypes, filters.timeframe])
+
   const lastUpdateLabel = React.useMemo(() => {
     if (!data?.summary.lastUpdatedAt) return 'No update timestamp available'
     return `Last update: ${formatDateTimeLabel(data.summary.lastUpdatedAt)}`
@@ -193,8 +239,93 @@ export function GlimsOverviewTab() {
       </section>
 
       <section className="overview__grid">
-        <div className="overview__card overview__card--full">
-          <CardHeader title="SAMPLES" subtitle="Daily count of samples created and reported (segmented by type)" />
+        <div className="overview__card overview__card--half">
+          <CardHeader title="TAT BY VOLUME" subtitle="Daily count of samples within vs above target" />
+          <div className="overview__chart">
+            {aggregatedTatDaily.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <AreaChart data={aggregatedTatDaily}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.08)" vertical={false} />
+                  <XAxis dataKey="label" stroke="var(--color-text-secondary)" tickLine={false} />
+                  <YAxis stroke="var(--color-text-secondary)" tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: '#0f1d3b', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}
+                    labelStyle={{ color: '#f4f7ff' }}
+                  />
+                  <Legend />
+                  <Area
+                    type="monotone"
+                    dataKey="withinSla"
+                    stackId="1"
+                    stroke="#2EA043"
+                    fill="rgba(46, 160, 67, 0.65)"
+                    name="Within target"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="beyondSla"
+                    stackId="1"
+                    stroke="#F85149"
+                    fill="rgba(248, 81, 73, 0.55)"
+                    name="Above target"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState loading={loading} />
+            )}
+          </div>
+        </div>
+
+        <div className="overview__card overview__card--half">
+          <CardHeader title="DAILY TAT TREND" subtitle="Daily average and moving average duration" />
+          <div className="overview__chart">
+            {aggregatedTatDaily.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={aggregatedTatDaily}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.08)" vertical={false} />
+                  <XAxis dataKey="label" stroke="var(--color-text-secondary)" tickLine={false} />
+                  <YAxis
+                    stroke="var(--color-text-secondary)"
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(val) => formatHoursToDuration(val)}
+                    width={70}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: '#0f1d3b', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}
+                    labelStyle={{ color: '#f4f7ff' }}
+                    formatter={(value: any) => formatHoursToDuration(value)}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="averageHours"
+                    stroke="#7EE787"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Daily avg (h)"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="movingAverageHours"
+                    stroke="#8B5CF6"
+                    strokeDasharray="4 4"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Moving avg (h)"
+                  />
+                  <ReferenceLine y={72} stroke="#FFD166" strokeDasharray="5 5" label="Target 72h" />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState loading={loading} />
+            )}
+          </div>
+        </div>
+
+        <div className="overview__card overview__card--half">
+          <CardHeader title="SAMPLES CREATED" subtitle="Daily count of samples created (segmented by type)" />
           <div className="overview__chart">
             {segmentedActivity.length > 0 ? (
               <ResponsiveContainer width="100%" height={320}>
@@ -216,6 +347,28 @@ export function GlimsOverviewTab() {
                       fill={TYPE_COLORS[type]?.samples || TYPE_COLORS.Unknown.samples}
                     />
                   ))}
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState loading={loading} />
+            )}
+          </div>
+        </div>
+
+        <div className="overview__card overview__card--half">
+          <CardHeader title="SAMPLES REPORTED" subtitle="Daily count of samples reported (segmented by type)" />
+          <div className="overview__chart">
+            {segmentedActivity.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={segmentedActivity}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.08)" vertical={false} />
+                  <XAxis dataKey="label" stroke="var(--color-text-secondary)" tickLine={false} />
+                  <YAxis stroke="var(--color-text-secondary)" tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: '#0f1d3b', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}
+                    labelStyle={{ color: '#f4f7ff' }}
+                  />
+                  <Legend />
                   {selectedTypes.map((type) => (
                     <Bar
                       key={`reports_${type}`}
@@ -363,83 +516,6 @@ export function GlimsOverviewTab() {
                     />
                   ))}
                 </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState loading={loading} />
-            )}
-          </div>
-        </div>
-
-        <div className="overview__card overview__card--full">
-          <CardHeader title="Daily TAT trend" subtitle="Average hours and TAT compliance per day" />
-          <div className="overview__chart">
-            {data?.tatDaily?.length ? (
-              <ResponsiveContainer width="100%" height={340}>
-                <AreaChart data={data.tatDaily}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.08)" />
-                  <XAxis dataKey="label" stroke="var(--color-text-secondary)" />
-                  <YAxis
-                    yAxisId="counts"
-                    orientation="left"
-                    stroke="var(--color-text-secondary)"
-                    tickLine={false}
-                    axisLine={false}
-                    width={60}
-                    label={{ value: 'Tests', angle: -90, position: 'insideLeft', fill: 'var(--color-text-secondary)' }}
-                  />
-                  <YAxis
-                    yAxisId="hours"
-                    orientation="right"
-                    stroke="var(--color-text-secondary)"
-                    tickLine={false}
-                    axisLine={false}
-                    width={60}
-                    label={{ value: 'Hours', angle: -90, position: 'insideRight', fill: 'var(--color-text-secondary)' }}
-                  />
-                  <Tooltip
-                    contentStyle={{ background: '#0f1d3b', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}
-                    labelStyle={{ color: '#f4f7ff' }}
-                  />
-                  <Legend />
-                  <Area
-                    yAxisId="counts"
-                    type="monotone"
-                    dataKey="withinSla"
-                    stackId="1"
-                    stroke="#2EA043"
-                    fill="rgba(46, 160, 67, 0.65)"
-                    name="Within target"
-                  />
-                  <Area
-                    yAxisId="counts"
-                    type="monotone"
-                    dataKey="beyondSla"
-                    stackId="1"
-                    stroke="#F85149"
-                    fill="rgba(248, 81, 73, 0.55)"
-                    name="Above target"
-                  />
-                  <Line
-                    yAxisId="hours"
-                    type="monotone"
-                    dataKey="averageHours"
-                    stroke="#7EE787"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Daily avg (h)"
-                  />
-                  <Line
-                    yAxisId="hours"
-                    type="monotone"
-                    dataKey="movingAverageHours"
-                    stroke="#8B5CF6"
-                    strokeDasharray="4 4"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Moving avg (h)"
-                  />
-                  <ReferenceLine yAxisId="hours" y={72} stroke="#FFD166" strokeDasharray="5 5" label="Target 72h" />
-                </AreaChart>
               </ResponsiveContainer>
             ) : (
               <EmptyState loading={loading} />

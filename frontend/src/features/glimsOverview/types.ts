@@ -67,6 +67,9 @@ export interface GlimsTatDailyResponse {
     average_hours: number | null
     within_tat: number
     beyond_tat: number
+    within_breakdown?: Record<string, number>
+    beyond_breakdown?: Record<string, number>
+    hours_breakdown?: Record<string, number>
     moving_average_hours?: number | null
   }>
 }

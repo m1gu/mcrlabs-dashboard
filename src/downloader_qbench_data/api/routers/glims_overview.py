@@ -449,32 +449,63 @@ def get_tat_daily(
 ) -> TatDailyResponse:
     start, end = _parse_dates(date_from, date_to)
     params = {"start": start, "end": end, "tat_target_hours": tat_target_hours}
+    
+    # We ignore sample_type parameter in the query to return full breakdown for client-side multi-select
     sql = f"""
         SELECT
             s.report_date AS d,
+            s.adult_use_medical,
             AVG(EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0) AS avg_hours,
             COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0 <= :tat_target_hours) AS within_tat,
-            COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0 > :tat_target_hours) AS beyond_tat
+            COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0 > :tat_target_hours) AS beyond_tat,
+            COUNT(*) AS total_for_type
         FROM glims_samples s
         WHERE s.report_date BETWEEN :start AND :end
           AND s.date_received IS NOT NULL
-          {"AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""}
-        GROUP BY s.report_date
+        GROUP BY s.report_date, s.adult_use_medical
         ORDER BY s.report_date
     """
-    if sample_type and sample_type != 'All':
-        params["sample_type"] = sample_type
     rows = session.execute(text(sql), params).all()
-    points: list[TatDailyPoint] = []
+    
+    # Group by date in Python
+    points_by_date: dict[date, TatDailyPoint] = {}
     for row in rows:
-        points.append(
-            TatDailyPoint(
-                date=row.d,
-                average_hours=float(row.avg_hours) if row.avg_hours is not None else None,
-                within_tat=row.within_tat or 0,
-                beyond_tat=row.beyond_tat or 0,
+        d = row.d
+        if d not in points_by_date:
+            points_by_date[d] = TatDailyPoint(
+                date=d,
+                average_hours=0,
+                within_tat=0,
+                beyond_tat=0,
+                within_breakdown={},
+                beyond_breakdown={},
+                hours_breakdown={}
             )
-        )
+        
+        p = points_by_date[d]
+        type_key = row.adult_use_medical or "Unknown"
+        
+        # Breakdown population
+        p.within_breakdown[type_key] = row.within_tat or 0
+        p.beyond_breakdown[type_key] = row.beyond_tat or 0
+        p.hours_breakdown[type_key] = float(row.avg_hours) if row.avg_hours is not None else 0
+        
+        # Aggregation (for default/full view if needed, but primarily for sorting/MA)
+        p.within_tat += row.within_tat or 0
+        p.beyond_tat += row.beyond_tat or 0
+        
+    # Sort and calculate daily average for the combined point (weighted average)
+    sorted_dates = sorted(points_by_date.keys())
+    points: list[TatDailyPoint] = []
+    for d in sorted_dates:
+        p = points_by_date[d]
+        total_reports = p.within_tat + p.beyond_tat
+        if total_reports > 0:
+            total_hours = sum(p.hours_breakdown[t] * (p.within_breakdown[t] + p.beyond_breakdown[t]) for t in p.hours_breakdown)
+            p.average_hours = total_hours / total_reports
+        else:
+            p.average_hours = None
+        points.append(p)
 
     # moving average
     for idx, point in enumerate(points):

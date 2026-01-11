@@ -47,6 +47,9 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
         beyondSla: point.beyond_tat,
         averageHours: point.average_hours ?? null,
         movingAverageHours: point.moving_average_hours ?? null,
+        withinBreakdown: point.within_breakdown,
+        beyondBreakdown: point.beyond_breakdown,
+        hours_breakdown: point.hours_breakdown,
       }
     }) ?? []
 
