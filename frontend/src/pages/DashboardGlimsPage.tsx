@@ -8,6 +8,7 @@ import { useAuth } from '../features/auth/AuthContext'
 
 const NAV_ITEMS = [
   { label: 'Overview', to: '/glims/overview' },
+  { label: 'Tests', to: '/glims/tests' },
   { label: 'Priority Samples', to: '/glims/priority' },
   { label: 'TAT Samples', to: '/glims/tat-samples' },
 ]
@@ -30,6 +31,13 @@ export function DashboardGlimsPage() {
         eyebrow: 'TAT Samples',
         title: 'TAT Samples',
         subtitle: 'Analyze the slowest reported GLIMS samples to spot turnaround bottlenecks.',
+      }
+    }
+    if (location.pathname.includes('/glims/tests')) {
+      return {
+        eyebrow: 'Tests',
+        title: 'Laboratory Tests',
+        subtitle: 'Monitor test lifecycle from preparation to run start.',
       }
     }
     return {

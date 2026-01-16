@@ -5,6 +5,7 @@ import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { GlimsOverviewTab } from './features/glimsOverview/GlimsOverviewTab'
 import { PrioritySamplesTab } from './features/prioritySamples/PrioritySamplesTab'
 import { GlimsTatSamplesTab } from './features/glimsTat/GlimsTatSamplesTab'
+import { GlimsTestsTab } from './features/glimsTests/GlimsTestsTab'
 
 export function App() {
   return (
@@ -21,6 +22,7 @@ export function App() {
       >
         <Route index element={<Navigate to="overview" replace />} />
         <Route path="overview" element={<GlimsOverviewTab />} />
+        <Route path="tests" element={<GlimsTestsTab />} />
         <Route path="priority" element={<PrioritySamplesTab />} />
         <Route path="tat-samples" element={<GlimsTatSamplesTab />} />
       </Route>
