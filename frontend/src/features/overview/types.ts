@@ -5,6 +5,7 @@ export interface OverviewFilters {
   dateTo: string
   timeframe: TimeframeOption
   sampleType?: string
+  customerId?: number | null
 }
 
 export interface MetricsSummaryResponse {

@@ -95,7 +95,17 @@ class NewCustomerFromSheetItem(BaseModel):
     date_created: date = Field(..., description="Fecha de registro en el sistema")
 
 
+
 class NewCustomersFromSheetResponse(BaseModel):
     """Respuesta del endpoint new-from-sheet."""
     customers: List[NewCustomerFromSheetItem]
     total: int = Field(..., description="Total de customers en el rango")
+
+
+class CustomerListItem(BaseModel):
+    id: int
+    name: str
+
+
+class CustomerListResponse(BaseModel):
+    customers: List[CustomerListItem]

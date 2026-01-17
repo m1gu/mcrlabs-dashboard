@@ -25,6 +25,8 @@ from downloader_qbench_data.api.schemas.glims_overview import (
     TopCustomersResponse,
     NewCustomerFromSheetItem,
     NewCustomersFromSheetResponse,
+    CustomerListResponse,
+    CustomerListItem,
 )
 
 router = APIRouter(
@@ -219,6 +221,7 @@ def get_activity(
     samples_where = ["s.date_received BETWEEN :start AND :end"]
     if dispensary_id:
         samples_where.append("s.dispensary_id = :dispensary_id")
+        params["dispensary_id"] = dispensary_id
     if sample_type and sample_type != 'All':
         samples_where.append("s.adult_use_medical = :sample_type")
         params["sample_type"] = sample_type
@@ -365,11 +368,21 @@ def get_new_customers_from_sheet(
 def get_top_customers(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    dispensary_id: Optional[int] = Query(None),
+    sample_type: Optional[str] = Query(None),
     limit: int = Query(10, ge=1, le=50),
     session: Session = Depends(get_db_session),
 ) -> TopCustomersResponse:
     start, end = _parse_dates(date_from, date_to)
     params = {"start": start, "end": end, "limit": limit}
+
+    filters = ["t.d BETWEEN :start AND :end"]
+    if dispensary_id:
+        filters.append("s.dispensary_id = :dispensary_id")
+        params["dispensary_id"] = dispensary_id
+    if sample_type and sample_type != 'All':
+        filters.append("s.adult_use_medical = :sample_type")
+        params["sample_type"] = sample_type
 
     test_union_parts = []
     for label, (table, date_a, date_b) in ASSAY_TABLES.items():
@@ -377,6 +390,9 @@ def get_top_customers(
             f"SELECT r.sample_id, COALESCE(r.{date_a}, r.{date_b}, s.date_received) AS d FROM {table} r JOIN glims_samples s ON s.sample_id = r.sample_id"
         )
     test_union = " UNION ALL ".join(test_union_parts)
+    
+    where_clause = " AND ".join(filters)
+    
     sql = f"""
         WITH test_events AS (
             {test_union}
@@ -387,7 +403,7 @@ def get_top_customers(
         FROM test_events t
         JOIN glims_samples s ON s.sample_id = t.sample_id
         JOIN glims_dispensaries d ON d.id = s.dispensary_id
-        WHERE t.d BETWEEN :start AND :end
+        WHERE {where_clause}
         GROUP BY d.id, d.name
         ORDER BY tests DESC
         LIMIT :limit
@@ -409,11 +425,16 @@ def get_top_customers(
 def get_tests_by_label(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    dispensary_id: Optional[int] = Query(None),
     sample_type: Optional[str] = Query(None),
     session: Session = Depends(get_db_session),
 ) -> TestsByLabelResponse:
     start, end = _parse_dates(date_from, date_to)
     params = {"start": start, "end": end}
+    if dispensary_id:
+        params["dispensary_id"] = dispensary_id
+    if sample_type and sample_type != 'All':
+        params["sample_type"] = sample_type
     labels: list[TestsByLabelItem] = []
     for label, (table, date_a, date_b) in ASSAY_TABLES.items():
         sql = f"""
@@ -421,11 +442,10 @@ def get_tests_by_label(
             FROM {table} r
             JOIN glims_samples s ON s.sample_id = r.sample_id
             WHERE COALESCE(r.{date_a}, r.{date_b}, s.date_received) BETWEEN :start AND :end
+            {"AND s.dispensary_id = :dispensary_id" if dispensary_id else ""}
             {"AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""}
             GROUP BY s.adult_use_medical
         """
-        if sample_type and sample_type != 'All':
-            params["sample_type"] = sample_type
         
         total_for_label = 0
         breakdown = {}
@@ -442,6 +462,7 @@ def get_tests_by_label(
 def get_tat_daily(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    dispensary_id: Optional[int] = Query(None),
     sample_type: Optional[str] = Query(None),
     tat_target_hours: float = Query(72.0, ge=1.0),
     moving_average_window: int = Query(7, ge=1, le=30),
@@ -449,6 +470,10 @@ def get_tat_daily(
 ) -> TatDailyResponse:
     start, end = _parse_dates(date_from, date_to)
     params = {"start": start, "end": end, "tat_target_hours": tat_target_hours}
+    if dispensary_id:
+        params["dispensary_id"] = dispensary_id
+    if sample_type and sample_type != 'All':
+        params["sample_type"] = sample_type
     
     # We ignore sample_type parameter in the query to return full breakdown for client-side multi-select
     sql = f"""
@@ -462,6 +487,8 @@ def get_tat_daily(
         FROM glims_samples s
         WHERE s.report_date BETWEEN :start AND :end
           AND s.date_received IS NOT NULL
+          {"AND s.dispensary_id = :dispensary_id" if dispensary_id else ""}
+          {"AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""}
         GROUP BY s.report_date, s.adult_use_medical
         ORDER BY s.report_date
     """
@@ -515,3 +542,27 @@ def get_tat_daily(
         point.moving_average_hours = float(sum(values) / len(values)) if values else None
 
     return TatDailyResponse(points=points)
+
+
+@router.get("/customers/list", response_model=CustomerListResponse)
+def get_customers_list(
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    session: Session = Depends(get_db_session),
+) -> CustomerListResponse:
+    """
+    Retorna la lista de dispensaries que tienen actividad (muestras) en el rango,
+    ordenados alfabéticamente por nombre.
+    """
+    start, end = _parse_dates(date_from, date_to)
+    sql = """
+        SELECT DISTINCT d.id, d.name
+        FROM glims_dispensaries d
+        JOIN glims_samples s ON s.dispensary_id = d.id
+        WHERE s.date_received BETWEEN :start AND :end
+        AND s.status NOT IN ('Cancelled', 'Destroyed')
+        ORDER BY d.name ASC
+    """
+    rows = session.execute(text(sql), {"start": start, "end": end}).all()
+    customers = [CustomerListItem(id=row.id, name=row.name) for row in rows]
+    return CustomerListResponse(customers=customers)

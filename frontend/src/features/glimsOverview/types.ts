@@ -75,3 +75,10 @@ export interface GlimsTatDailyResponse {
 }
 
 export type GlimsOverviewData = OverviewData
+
+export interface GlimsCustomerListResponse {
+  customers: Array<{
+    id: number
+    name: string
+  }>
+}

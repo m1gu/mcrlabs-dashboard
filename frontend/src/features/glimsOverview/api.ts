@@ -12,9 +12,13 @@ import type {
 } from './types'
 
 export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Promise<OverviewData> {
-  const baseParams = {
+  const baseParams: Record<string, any> = {
     date_from: filters.dateFrom,
     date_to: filters.dateTo,
+  }
+
+  if (filters.customerId) {
+    baseParams.dispensary_id = filters.customerId
   }
 
   const [summary, activity, newCustomers, topCustomers, labelDistribution, tatDaily] = await Promise.all([
@@ -112,4 +116,14 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
         .sort((a, b) => b.count - a.count) ?? [],
     tatDaily: tatDailySeries,
   }
+}
+
+export async function fetchGlimsCustomersList(
+  dateFrom: string,
+  dateTo: string
+): Promise<any> {
+  return apiFetchV2('/glims/overview/customers/list', {
+    date_from: dateFrom,
+    date_to: dateTo,
+  })
 }

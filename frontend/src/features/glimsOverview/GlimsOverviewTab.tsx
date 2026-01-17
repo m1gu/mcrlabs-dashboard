@@ -4,6 +4,7 @@ import { DEFAULT_DATE_RANGE_DAYS } from '../../config'
 import { formatDateInput, formatDateLabel, formatDateMMDDYYYY, formatDateTimeLabel, formatHoursToDuration, formatNumber } from '../../utils/format'
 import type { OverviewFilters, TimeframeOption } from '../overview/types'
 import { useGlimsOverviewData } from './useGlimsOverviewData'
+import { useGlimsCustomers } from './useGlimsCustomers'
 import '../overview/overview.css'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, AreaChart, Area, Line, LineChart, ReferenceLine } from 'recharts'
 
@@ -20,6 +21,7 @@ function createInitialFilters(): OverviewFilters {
     dateTo: formatDateInput(today),
     timeframe: 'daily',
     sampleType: 'All',
+    customerId: null,
   }
 }
 
@@ -40,6 +42,9 @@ export function GlimsOverviewTab() {
   // Local state for multi-select checkboxes
   const [selectedTypes, setSelectedTypes] = React.useState<string[]>(SAMPLE_TYPES)
 
+  // Hook for customer list
+  const { customers, loading: customersLoading } = useGlimsCustomers(formFilters.dateFrom, formFilters.dateTo)
+
   const { data, loading, error, refresh } = useGlimsOverviewData(filters)
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -58,7 +63,8 @@ export function GlimsOverviewTab() {
     const isSameFilters =
       formFilters.dateFrom === filters.dateFrom &&
       formFilters.dateTo === filters.dateTo &&
-      formFilters.timeframe === filters.timeframe
+      formFilters.timeframe === filters.timeframe &&
+      formFilters.customerId === filters.customerId
 
     if (isSameFilters) {
       void refresh()
@@ -66,6 +72,34 @@ export function GlimsOverviewTab() {
       setFilters({ ...formFilters, sampleType: 'All' })
     }
   }
+
+  const handleCustomerChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value
+    const customerId = value === '' ? null : parseInt(value, 10)
+
+    // Update formFilters
+    setFormFilters((prev) => ({
+      ...prev,
+      customerId,
+    }))
+
+    // Auto-refresh: update filters immediately
+    setFilters((prev) => ({
+      ...prev,
+      customerId,
+    }))
+  }
+
+  // Reset customer selection if the customer is no longer in the filtered list
+  React.useEffect(() => {
+    if (formFilters.customerId && customers.length > 0 && !customersLoading) {
+      const exists = customers.some((c) => c.id === formFilters.customerId)
+      if (!exists) {
+        setFormFilters((prev) => ({ ...prev, customerId: null }))
+        setFilters((prev) => ({ ...prev, customerId: null }))
+      }
+    }
+  }, [customers, customersLoading, formFilters.customerId])
 
   // Aggregate KPIs based on selected types
   const aggregatedKpis = React.useMemo(() => {
@@ -194,6 +228,23 @@ export function GlimsOverviewTab() {
               {TIMEFRAME_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="overview__control">
+            <span>Customer</span>
+            <select
+              name="customerId"
+              value={formFilters.customerId ?? ''}
+              onChange={handleCustomerChange}
+              disabled={customersLoading}
+              style={{ minWidth: '200px' }}
+            >
+              <option value="">All Customers</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
                 </option>
               ))}
             </select>
