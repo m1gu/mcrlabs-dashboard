@@ -200,68 +200,7 @@ export function GlimsOverviewTab() {
 
   return (
     <div className="overview">
-      <section className="overview__controls">
-        <div className="overview__control-group">
-          <label className="overview__control">
-            <span>From</span>
-            <input
-              type="date"
-              name="dateFrom"
-              value={formFilters.dateFrom}
-              max={formFilters.dateTo}
-              onChange={handleInputChange}
-            />
-          </label>
-          <label className="overview__control">
-            <span>To</span>
-            <input
-              type="date"
-              name="dateTo"
-              value={formFilters.dateTo}
-              min={formFilters.dateFrom}
-              onChange={handleInputChange}
-            />
-          </label>
-          <label className="overview__control">
-            <span>Timeframe</span>
-            <select name="timeframe" value={formFilters.timeframe} onChange={handleInputChange}>
-              {TIMEFRAME_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="overview__control">
-            <span>Customer</span>
-            <select
-              name="customerId"
-              value={formFilters.customerId ?? ''}
-              onChange={handleCustomerChange}
-              disabled={customersLoading}
-              style={{ minWidth: '200px' }}
-            >
-              <option value="">All Customers</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="overview__refresh-button" type="button" onClick={handleRefresh} disabled={loading}>
-            {loading ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
-        <div className="overview__status">
-          <span>{lastUpdateLabel}</span>
-          {data?.summary.rangeStart && data?.summary.rangeEnd && (
-            <span>
-              Range: {formatDateLabel(data.summary.rangeStart)} to {formatDateLabel(data.summary.rangeEnd)}
-            </span>
-          )}
-        </div>
-      </section>
+
 
       <aside className="overview__floating-filter">
         <h3 className="overview__floating-filter-title">Sample Type</h3>
@@ -572,6 +511,69 @@ export function GlimsOverviewTab() {
               <EmptyState loading={loading} />
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="overview__controls">
+        <div className="overview__control-group">
+          <label className="overview__control">
+            <span>From</span>
+            <input
+              type="date"
+              name="dateFrom"
+              value={formFilters.dateFrom}
+              max={formFilters.dateTo}
+              onChange={handleInputChange}
+            />
+          </label>
+          <label className="overview__control">
+            <span>To</span>
+            <input
+              type="date"
+              name="dateTo"
+              value={formFilters.dateTo}
+              min={formFilters.dateFrom}
+              onChange={handleInputChange}
+            />
+          </label>
+          <label className="overview__control">
+            <span>Timeframe</span>
+            <select name="timeframe" value={formFilters.timeframe} onChange={handleInputChange}>
+              {TIMEFRAME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="overview__control">
+            <span>Customer</span>
+            <select
+              name="customerId"
+              value={formFilters.customerId ?? ''}
+              onChange={handleCustomerChange}
+              disabled={customersLoading}
+              style={{ minWidth: '200px' }}
+            >
+              <option value="">All Customers</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="overview__refresh-button" type="button" onClick={handleRefresh} disabled={loading}>
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+        <div className="overview__status">
+          <span>{lastUpdateLabel}</span>
+          {data?.summary.rangeStart && data?.summary.rangeEnd && (
+            <span>
+              Range: {formatDateLabel(data.summary.rangeStart)} to {formatDateLabel(data.summary.rangeEnd)}
+            </span>
+          )}
         </div>
       </section>
     </div>
