@@ -22,8 +22,8 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
   }
 
   const [summary, activity, newCustomers, topCustomers, labelDistribution, tatDaily] = await Promise.all([
-    apiFetchV2<GlimsSummaryResponse>('/glims/overview/summary', { ...baseParams, sample_type: filters.sampleType }),
-    apiFetchV2<GlimsActivityResponse>('/glims/overview/activity', { ...baseParams, sample_type: filters.sampleType }),
+    apiFetchV2<GlimsSummaryResponse>('/glims/overview/summary', { ...baseParams, sample_type: filters.sampleType, timeframe: filters.timeframe }),
+    apiFetchV2<GlimsActivityResponse>('/glims/overview/activity', { ...baseParams, sample_type: filters.sampleType, timeframe: filters.timeframe }),
     apiFetchV2<GlimsNewCustomersFromSheetResponse>('/glims/overview/customers/new-from-sheet', {
       ...baseParams,
       limit: 10,
@@ -32,12 +32,13 @@ export async function fetchGlimsOverviewData(filters: GlimsOverviewFilters): Pro
       ...baseParams,
       limit: 10,
     }),
-    apiFetchV2<GlimsTestsByLabelResponse>('/glims/overview/tests/by-label', { ...baseParams, sample_type: filters.sampleType }),
+    apiFetchV2<GlimsTestsByLabelResponse>('/glims/overview/tests/by-label', { ...baseParams, sample_type: filters.sampleType, timeframe: filters.timeframe }),
     apiFetchV2<GlimsTatDailyResponse>('/glims/overview/tat-daily', {
       ...baseParams,
       sample_type: filters.sampleType,
+      timeframe: filters.timeframe,
       tat_target_hours: 72,
-      moving_average_window: filters.timeframe === 'weekly' ? 14 : 7,
+      moving_average_window: filters.timeframe === 'weekly' ? 14 : filters.timeframe === 'monthly' ? 3 : 7,
     }),
   ])
 

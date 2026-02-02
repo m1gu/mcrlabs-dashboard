@@ -1,0 +1,18 @@
+{
+  "tables": {
+    "glims_dispensaries": 541,
+    "glims_samples": 17009,
+    "glims_cn_results": 10570,
+    "glims_hm_results": 4033,
+    "glims_tp_results": 1743,
+    "glims_mb_results": 7353,
+    "glims_rs_results": 2452,
+    "glims_wa_results": 153,
+    "glims_mc_results": 0,
+    "glims_pn_results": 0,
+    "glims_ffm_results": 492,
+    "glims_lw_results": 3,
+    "glims_ho_results": 331
+  },
+  "total_records": 44680
+}

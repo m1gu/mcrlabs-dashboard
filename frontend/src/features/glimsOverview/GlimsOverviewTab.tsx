@@ -11,6 +11,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGri
 const TIMEFRAME_OPTIONS: Array<{ value: TimeframeOption; label: string }> = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
 ]
 
 function createInitialFilters(): OverviewFilters {
@@ -25,7 +26,7 @@ function createInitialFilters(): OverviewFilters {
   }
 }
 
-const SAMPLE_TYPES = ['Adult Use', 'Medical', 'AU R&D']
+const SAMPLE_TYPES = ['Adult Use', 'Medical', 'AU R&D', 'Unknown']
 
 const TYPE_COLORS: Record<string, { samples: string; tests: string; reports: string }> = {
   'Adult Use': { samples: '#38BDF8', tests: '#38BDF8', reports: '#38BDF8' }, // Celeste

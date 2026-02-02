@@ -291,6 +291,94 @@ def normalize_sample_id(raw: str, strip_numeric: bool = False) -> str:
     return sid or raw.strip()
 
 
+def normalize_sample_id_clean(raw: str) -> str:
+    """Limpia el sample_id para agrupación en RS raw."""
+    if not raw:
+        return ""
+    sid = raw.strip()
+    sid = re.sub(r"^[Dd]up-", "", sid)
+    sid = re.sub(r"-\d+mg$", "", sid, flags=re.IGNORECASE)
+    if sid.count("-") >= 2:
+        sid = re.sub(r"-\d+$", "", sid)
+    if not re.match(r"^S\d{2}-", sid, flags=re.IGNORECASE):
+        sid = f"S26-{sid}"
+    return sid.upper()
+
+
+def upsert_rs_raw(engine: Engine, df: pd.DataFrame) -> int:
+    """Inserta datos del tab RS en glims_rs_results_raw."""
+    if df.empty or "Sample ID" not in df.columns:
+        return 0
+
+    col_mapping = {
+        "sample_id": "Sample ID",
+        "prep_date": "RS Analysis Prep Date",
+        "start_date": "RS Analysis Start Date",
+        "lab_analyst": "Lab Analyst",
+        "instrument": "Instrument",
+        "sample_weight_mg": "Sample Weight (mg)",
+        "dilution": "Dilution",
+        "acetone": "Acetone",
+        "acetonitrile": "Acetonitrile",
+        "benzene": "Benzene",
+        "butane": "Butane",
+        "chloroform": "Chloroform",
+        "dichloroethane_1_2": "1,2-Dichloroethane",
+        "ethanol": "Ethanol",
+        "ethyl_acetate": "Ethyl acetate",
+        "ethyl_ether": "Ethyl ether",
+        "ethylene_oxide": "Ethylene oxide",
+        "heptane": "Heptane",
+        "hexane": "Hexane",
+        "isopropyl_alcohol": "Isopropyl alcohol",
+        "methanol": "Methanol",
+        "methylene_chloride": "Methylene chloride",
+        "pentane": "Pentane",
+        "propane": "Propane",
+        "toluene": "Toluene",
+        "total_xylenes": "Total xylenes",
+        "trichloroethylene": "Trichloroethylene",
+        "client": "Client",
+        "data_analyst": "Data Analyst",
+        "rerun_category": "Rerun Category",
+        "note": "Note",
+        "batch_id": "Batch ID",
+    }
+
+    rows = []
+    for _, row in df.iterrows():
+        raw_sid = str(row.get("Sample ID") or "").strip()
+        if not raw_sid:
+            continue
+        prep = to_date_only(row.get("RS Analysis Prep Date"))
+        start = to_date_only(row.get("RS Analysis Start Date"))
+        if not prep and not start:
+            continue
+
+        clean_sid = normalize_sample_id_clean(raw_sid)
+        payload = {"sample_id": raw_sid, "sample_id_clean": clean_sid}
+        for db_col, sheet_col in col_mapping.items():
+            if db_col == "sample_id": continue
+            val = row.get(sheet_col)
+            if db_col in ("prep_date", "start_date"):
+                payload[db_col] = to_date_only(val)
+            elif db_col in ("sample_weight_mg", "dilution"):
+                payload[db_col] = to_num(val)
+            else:
+                payload[db_col] = val if val and str(val).strip() else None
+        rows.append(payload)
+
+    if not rows:
+        return 0
+
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE glims_rs_results_raw"))
+        cols_list = list(rows[0].keys())
+        sql = f"INSERT INTO glims_rs_results_raw ({', '.join(cols_list)}) VALUES ({', '.join(f':{c}' for c in cols_list)})"
+        conn.execute(text(sql), rows)
+    return len(rows)
+
+
 def extract_start_date(row: Mapping[str, Any], mapping: dict[str, str]) -> datetime.date | None:
     """Return the start date used to decide if a row is eligible."""
 
@@ -983,32 +1071,48 @@ def main() -> None:
         result_cols=["pass_fail"],
     )
 
-    run_assay(
-        TAB_RS,
-        "glims_rs_results",
-        mapping={
-            "prep_date": "RS Analysis Prep Date",
-            "start_date": "RS Analysis Start Date",
-            "lab_analyst": "Lab Analyst",
-            "instrument": "Instrument",
-            "sample_weight_mg": "Sample Weight (mg)",
-            "dilution": "Dilution",
-            "qc_date": "QC Date",
-            "qc_analyst": "QC Analyst",
-            "client": "Client",
-            "data_analyst": "Data Analyst",
-            "rerun_category": "Rerun Category",
-            "note": "Note",
-            "batch_id": "Batch ID",
-        },
-        required_src_cols=[
-            "Sample ID",
-            "RS Analysis Prep Date",
-            "RS Analysis Start Date",
-            "Lab Analyst",
-            "Batch ID",
-        ],
-    )
+    # RS Standard + RS Raw (Surgical Integration)
+    df_rs = fetch_df(sheet, TAB_RS)
+    try:
+        upsert_generic_assay(
+            engine,
+            df_rs,
+            sample_ids,
+            "glims_rs_results",
+            mapping={
+                "prep_date": "RS Analysis Prep Date",
+                "start_date": "RS Analysis Start Date",
+                "lab_analyst": "Lab Analyst",
+                "instrument": "Instrument",
+                "sample_weight_mg": "Sample Weight (mg)",
+                "dilution": "Dilution",
+                "qc_date": "QC Date",
+                "qc_analyst": "QC Analyst",
+                "client": "Client",
+                "data_analyst": "Data Analyst",
+                "rerun_category": "Rerun Category",
+                "note": "Note",
+                "batch_id": "Batch ID",
+            },
+            required_src_cols=[
+                "Sample ID",
+                "RS Analysis Prep Date",
+                "RS Analysis Start Date",
+                "Lab Analyst",
+                "Batch ID",
+            ],
+        )
+        record(TAB_RS, "ok", len(df_rs))
+    except Exception as exc:  # noqa: BLE001
+        record(TAB_RS, "error", len(df_rs), str(exc))
+        raise
+
+    try:
+        rs_raw_count = upsert_rs_raw(engine, df_rs)
+        record("RS_RAW", "ok", rs_raw_count)
+    except Exception as exc:  # noqa: BLE001
+        record("RS_RAW", "error", 0, str(exc))
+        LOGGER.error("Failed RS Raw sync: %s", exc)
 
     run_assay(
         TAB_TP,

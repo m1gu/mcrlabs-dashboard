@@ -193,6 +193,23 @@ def get_summary(
             cat = row.adult_use_medical or "Unknown"
             tests_by_type[cat] = tests_by_type.get(cat, 0) + row.c
 
+    # Add legacy tests count from requested_testing for 'Unknown' type
+    legacy_tests_sql = f"""
+        SELECT SUM(array_length(string_to_array(s.requested_testing, ', '), 1)) AS c
+        FROM glims_samples s
+        WHERE s.date_received BETWEEN :start AND :end
+          AND s.adult_use_medical = 'Unknown'
+          AND s.requested_testing IS NOT NULL
+          AND s.requested_testing != ''
+          {"AND s.dispensary_id = :dispensary_id" if dispensary_id else ""}
+          {"AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""}
+    """
+    legacy_row = session.execute(text(legacy_tests_sql), params).fetchone()
+    if legacy_row and legacy_row.c:
+        legacy_count = int(legacy_row.c)
+        tests_total += legacy_count
+        tests_by_type["Unknown"] = tests_by_type.get("Unknown", 0) + legacy_count
+
     return OverviewSummary(
         samples=samples_total,
         tests=tests_total,
@@ -214,10 +231,23 @@ def get_activity(
     date_to: Optional[date] = Query(None),
     dispensary_id: Optional[int] = Query(None),
     sample_type: Optional[str] = Query(None),
+    timeframe: str = Query("daily"),
     session: Session = Depends(get_db_session),
 ) -> ActivityResponse:
     start, end = _parse_dates(date_from, date_to)
     params = {"start": start, "end": end}
+    
+    # Valida timeframe
+    if timeframe not in ["daily", "weekly", "monthly"]:
+        timeframe = "daily"
+
+    # SQL mapping for date grouping
+    trunc_unit = {
+        "daily": "day",
+        "weekly": "week",
+        "monthly": "month"
+    }[timeframe]
+
     samples_where = ["s.date_received BETWEEN :start AND :end"]
     if dispensary_id:
         samples_where.append("s.dispensary_id = :dispensary_id")
@@ -227,10 +257,10 @@ def get_activity(
         params["sample_type"] = sample_type
 
     samples_sql = f"""
-        SELECT s.date_received AS d, s.adult_use_medical, COUNT(*) AS c
+        SELECT date_trunc('{trunc_unit}', s.date_received)::date AS d, s.adult_use_medical, COUNT(*) AS c
         FROM glims_samples s
         WHERE {" AND ".join(samples_where)}
-        GROUP BY s.date_received, s.adult_use_medical
+        GROUP BY 1, 2
     """
     
     samples_map: dict[date, int] = {}
@@ -251,10 +281,10 @@ def get_activity(
     type_clause = "AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""
 
     reported_sql = f"""
-        SELECT s.report_date AS d, s.adult_use_medical, COUNT(*) AS c
+        SELECT date_trunc('{trunc_unit}', s.report_date)::date AS d, s.adult_use_medical, COUNT(*) AS c
         FROM glims_samples s
         WHERE s.report_date BETWEEN :start AND :end {disp_clause} {type_clause}
-        GROUP BY s.report_date, s.adult_use_medical
+        GROUP BY 1, 2
     """
     reported_map: dict[date, int] = {}
     reported_breakdown: dict[date, dict[str, int]] = {}
@@ -270,12 +300,12 @@ def get_activity(
     tests_breakdown: dict[date, dict[str, int]] = {}
     for label, (table, date_a, date_b) in ASSAY_TABLES.items():
         test_sql = f"""
-            SELECT COALESCE(r.{date_a}, r.{date_b}, s.date_received) AS d, s.adult_use_medical, COUNT(*) AS c
+            SELECT date_trunc('{trunc_unit}', COALESCE(r.{date_a}, r.{date_b}, s.date_received))::date AS d, s.adult_use_medical, COUNT(*) AS c
             FROM {table} r
             JOIN glims_samples s ON s.sample_id = r.sample_id
             WHERE COALESCE(r.{date_a}, r.{date_b}, s.date_received) BETWEEN :start AND :end 
             {disp_clause} {type_clause}
-            GROUP BY COALESCE(r.{date_a}, r.{date_b}, s.date_received), s.adult_use_medical
+            GROUP BY 1, 2
         """
         for row in session.execute(text(test_sql), params):
             d_val = row.d
@@ -285,8 +315,39 @@ def get_activity(
                 tests_breakdown[d_val] = {}
             tests_breakdown[d_val][cat] = tests_breakdown[d_val].get(cat, 0) + row.c
 
+    # Count tests from legacy Qbench samples using requested_testing field
+    legacy_tests_sql = f"""
+        SELECT 
+            date_trunc('{trunc_unit}', s.date_received)::date AS d,
+            s.adult_use_medical,
+            SUM(array_length(string_to_array(s.requested_testing, ', '), 1)) AS c
+        FROM glims_samples s
+        WHERE s.date_received BETWEEN :start AND :end
+          AND s.adult_use_medical = 'Unknown'
+          AND s.requested_testing IS NOT NULL
+          AND s.requested_testing != ''
+          {disp_clause} {type_clause}
+        GROUP BY 1, 2
+    """
+    for row in session.execute(text(legacy_tests_sql), params):
+        d_val = row.d
+        cat = row.adult_use_medical or "Unknown"
+        tests_map[d_val] = tests_map.get(d_val, 0) + (row.c or 0)
+        if d_val not in tests_breakdown:
+            tests_breakdown[d_val] = {}
+        tests_breakdown[d_val][cat] = tests_breakdown[d_val].get(cat, 0) + (row.c or 0)
+
     points: list[ActivityPoint] = []
+    
+    # Logic to fill gaps based on timeframe
     current = start
+    if timeframe == "weekly":
+        # Start at beginning of week
+        current = current - timedelta(days=current.weekday())
+    elif timeframe == "monthly":
+        # Start at beginning of month
+        current = date(current.year, current.month, 1)
+
     while current <= end:
         points.append(
             ActivityPoint(
@@ -299,7 +360,20 @@ def get_activity(
                 reported_breakdown=reported_breakdown.get(current, {}),
             )
         )
-        current += timedelta(days=1)
+        if timeframe == "daily":
+            current += timedelta(days=1)
+        elif timeframe == "weekly":
+            current += timedelta(weeks=1)
+        elif timeframe == "monthly":
+            # Add one month
+            month = current.month + 1
+            year = current.year
+            if month > 12:
+                month = 1
+                year += 1
+            current = date(year, month, 1)
+
+    return ActivityResponse(points=points)
     return ActivityResponse(points=points)
 
 
@@ -453,6 +527,23 @@ def get_tests_by_label(
             total_for_label += row.c
             breakdown[row.adult_use_medical or "Unknown"] = row.c
         
+        # Add legacy counts from requested_testing for this specific label
+        legacy_label_sql = f"""
+            SELECT COUNT(*)
+            FROM glims_samples s
+            WHERE s.date_received BETWEEN :start AND :end
+              AND s.adult_use_medical = 'Unknown'
+              AND s.requested_testing IS NOT NULL
+              AND :label = ANY(string_to_array(s.requested_testing, ', '))
+              {"AND s.dispensary_id = :dispensary_id" if dispensary_id else ""}
+              {"AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""}
+        """
+        legacy_label_params = {**params, "label": label}
+        legacy_count = session.execute(text(legacy_label_sql), legacy_label_params).scalar() or 0
+        if legacy_count > 0:
+            total_for_label += legacy_count
+            breakdown["Unknown"] = breakdown.get("Unknown", 0) + legacy_count
+        
         labels.append(TestsByLabelItem(key=label, count=total_for_label, breakdown=breakdown))
     labels.sort(key=lambda x: x.count, reverse=True)
     return TestsByLabelResponse(labels=labels)
@@ -464,6 +555,7 @@ def get_tat_daily(
     date_to: Optional[date] = Query(None),
     dispensary_id: Optional[int] = Query(None),
     sample_type: Optional[str] = Query(None),
+    timeframe: str = Query("daily"),
     tat_target_hours: float = Query(72.0, ge=1.0),
     moving_average_window: int = Query(7, ge=1, le=30),
     session: Session = Depends(get_db_session),
@@ -474,11 +566,21 @@ def get_tat_daily(
         params["dispensary_id"] = dispensary_id
     if sample_type and sample_type != 'All':
         params["sample_type"] = sample_type
+
+    # Valida timeframe
+    if timeframe not in ["daily", "weekly", "monthly"]:
+        timeframe = "daily"
+
+    trunc_unit = {
+        "daily": "day",
+        "weekly": "week",
+        "monthly": "month"
+    }[timeframe]
     
     # We ignore sample_type parameter in the query to return full breakdown for client-side multi-select
     sql = f"""
         SELECT
-            s.report_date AS d,
+            date_trunc('{trunc_unit}', s.report_date)::date AS d,
             s.adult_use_medical,
             AVG(EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0) AS avg_hours,
             COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (s.report_date::timestamp - s.date_received::timestamp))/3600.0 <= :tat_target_hours) AS within_tat,
@@ -489,10 +591,37 @@ def get_tat_daily(
           AND s.date_received IS NOT NULL
           {"AND s.dispensary_id = :dispensary_id" if dispensary_id else ""}
           {"AND s.adult_use_medical = :sample_type" if sample_type and sample_type != 'All' else ""}
-        GROUP BY s.report_date, s.adult_use_medical
-        ORDER BY s.report_date
+        GROUP BY 1, 2
+        ORDER BY 1
     """
     rows = session.execute(text(sql), params).all()
+    
+    # Group by date in Python
+    points_by_date: dict[date, TatDailyPoint] = {}
+    for row in rows:
+        d = row.d
+        if d not in points_by_date:
+            points_by_date[d] = TatDailyPoint(
+                date=d,
+                average_hours=0,
+                within_tat=0,
+                beyond_tat=0,
+                within_breakdown={},
+                beyond_breakdown={},
+                hours_breakdown={}
+            )
+        
+        p = points_by_date[d]
+        type_key = row.adult_use_medical or "Unknown"
+        
+        # Breakdown population
+        p.within_breakdown[type_key] = row.within_tat or 0
+        p.beyond_breakdown[type_key] = row.beyond_tat or 0
+        p.hours_breakdown[type_key] = float(row.avg_hours) if row.avg_hours is not None else 0
+        
+        # Aggregation (for default/full view if needed, but primarily for sorting/MA)
+        p.within_tat += row.within_tat or 0
+        p.beyond_tat += row.beyond_tat or 0
     
     # Group by date in Python
     points_by_date: dict[date, TatDailyPoint] = {}

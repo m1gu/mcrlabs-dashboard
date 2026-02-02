@@ -1,0 +1,11 @@
+{
+  "status": "OK",
+  "total_rows_csv": 14377,
+  "type_distribution": {
+    "Adult Use": 6268,
+    "Medical MJ": 5748,
+    "AU Client R&D": 2361
+  },
+  "full_id_nulls": 0,
+  "full_id_coverage_pct": 100.0
+}

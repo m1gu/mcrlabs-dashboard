@@ -1,0 +1,11 @@
+{
+  "started_at": "2026-01-31T14:31:48.077796",
+  "finished_at": "2026-01-31T14:31:48.564194",
+  "dry_run": false,
+  "fields_processed": {
+    "matrix": 0,
+    "report_date": 18,
+    "date_received": 0
+  },
+  "total_updates_requested": 18
+}

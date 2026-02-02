@@ -1,0 +1,15 @@
+{
+  "started_at": "2026-01-31T14:26:49.179128",
+  "finished_at": "2026-01-31T14:26:52.510030",
+  "dry_run": false,
+  "csv_rows_total": 14377,
+  "csv_rows_mapped": 14377,
+  "samples_found_unknown_db": 16127,
+  "samples_updated": 14110,
+  "samples_not_found_in_csv": 2017,
+  "type_distribution_updated": {
+    "Medical": 5691,
+    "Adult Use": 6091,
+    "AU R&D": 2328
+  }
+}

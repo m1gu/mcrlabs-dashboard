@@ -1,0 +1,13 @@
+{
+  "started_at": "2026-02-01T09:32:10.377622",
+  "finished_at": "2026-02-01T09:32:16.686629",
+  "dry_run": false,
+  "total_rows_csv": 14377,
+  "inserted": {
+    "glims_cn_results": 10094,
+    "glims_hm_results": 3837,
+    "glims_tp_results": 1712,
+    "glims_mb_results": 6936,
+    "glims_rs_results": 2318
+  }
+}

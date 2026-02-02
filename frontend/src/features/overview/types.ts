@@ -1,4 +1,4 @@
-export type TimeframeOption = 'daily' | 'weekly'
+export type TimeframeOption = 'daily' | 'weekly' | 'monthly'
 
 export interface OverviewFilters {
   dateFrom: string
