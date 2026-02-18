@@ -149,13 +149,14 @@ El frontend ha sido diseñado con una estética moderna, premium y de alta visib
 
 ### 📸 Capturas de Pantalla
 
-````carousel
-![Glims Overview](file:///d:/MCRLABS/mcrlabs-dashboard/docs/screenshots/overview_view.png)
-<!-- slide -->
-![Laboratory Tests](file:///d:/MCRLABS/mcrlabs-dashboard/docs/screenshots/tests_view.png)
-<!-- slide -->
-![Priority Samples](file:///d:/MCRLABS/mcrlabs-dashboard/docs/screenshots/priority_samples_view.png)
-````
+#### Overview Dashboard
+![Glims Overview](docs/screenshots/overview_view.png)
+
+#### Laboratory Tests
+![Laboratory Tests](docs/screenshots/tests_view.png)
+
+#### Priority Samples
+![Priority Samples](docs/screenshots/priority_samples_view.png)
 
 ## Levantar backend (API)
 ```bash
