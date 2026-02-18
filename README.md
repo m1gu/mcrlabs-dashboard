@@ -131,6 +131,32 @@ npm run dev      # http://localhost:5177
 npm run build    # genera frontend/dist
 ```
 
+## UI Design & Frontend Stack
+
+El frontend ha sido diseñado con una estética moderna, premium y de alta visibilidad, optimizada para entornos de laboratorio.
+
+### 🎨 Estética de Diseño
+- **Modern Dark Theme:** Uso de paletas de colores profundas (`#050b18`) con acentos vibrantes para reducir la fatiga visual.
+- **Glassmorphism:** Efectos de elevación y desenfoque para dar una sensación de profundidad y jerarquía.
+- **Micro-animaciones:** Transiciones suaves y feedback visual interactivo.
+- **Responsive & Dynamic:** Interfaz reactiva que se ajusta a diferentes resoluciones de monitor.
+
+### 🛠️ Stack Tecnológico
+- **Core:** [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
+- **Build Tool:** [Vite](https://vitejs.dev/)
+- **Styling:** Vanilla CSS con Custom Properties (CSS Variables) para un control total y rendimiento óptimo.
+- **Data Visualization:** [Recharts](https://recharts.org/) y [@nivo/heatmap](https://nivo.rocks/heatmap/) para gráficos interactivos y representaciones de datos complejas.
+
+### 📸 Capturas de Pantalla
+
+````carousel
+![Glims Overview](file:///d:/MCRLABS/mcrlabs-dashboard/docs/screenshots/overview_view.png)
+<!-- slide -->
+![Laboratory Tests](file:///d:/MCRLABS/mcrlabs-dashboard/docs/screenshots/tests_view.png)
+<!-- slide -->
+![Priority Samples](file:///d:/MCRLABS/mcrlabs-dashboard/docs/screenshots/priority_samples_view.png)
+````
+
 ## Levantar backend (API)
 ```bash
 python scripts/run_api.py --host 0.0.0.0 --port 8000
